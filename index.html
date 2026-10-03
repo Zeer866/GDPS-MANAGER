@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>GDPS MANAGER</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF4D8D'/><rect x='28' y='28' width='44' height='44' fill='%2314122B'/></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#14122B;--panel:#1E1B3F;--line:#322E63;--tx:#EDEBFF;--mut:#9C98C9;--pink:#FF4D8D;--cyan:#3FD5FF;--ok:#4ADE80;--bad:#FF6B6B;font-family:Rubik,system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;border-radius:8px;padding:.5rem .9rem;background:var(--line);transition:background .15s}
+button:hover{background:#443f86}
+button.pri{background:var(--pink);color:#fff;font-weight:500}
+button.pri:hover{background:#ff6ba0}
+button.dng{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+button.sm{padding:.3rem .6rem;font-size:.85rem}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.6rem .7rem}
+label{display:block;margin:.7rem 0 .25rem;color:var(--mut);font-size:.9rem}
+.hide{display:none!important}
+#login{max-width:380px;margin:12vh auto;padding:1.5rem}
+#login h1{font-size:2rem;margin:0 0 .3rem}
+#login h1 b{color:var(--pink)}
+.row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+.msg{margin-top:1rem;color:var(--bad);min-height:1.2em;font-size:.95rem;word-break:break-word}
+header{display:flex;align-items:center;gap:1rem;padding:.8rem 1rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{margin:0;font-size:1.2rem}header h1 b{color:var(--pink)}
+header .who{margin-left:auto;color:var(--mut);font-size:.85rem;display:flex;gap:.6rem;align-items:center}
+nav{display:flex;gap:.3rem;overflow-x:auto;padding:.6rem 1rem;border-bottom:1px solid var(--line)}
+nav button{background:transparent;white-space:nowrap;color:var(--mut)}
+nav button.on{background:var(--panel);color:var(--tx);box-shadow:inset 0 -2px var(--pink)}
+main{padding:1rem;max-width:1100px;margin:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem}
+.card .n{font-size:2rem;font-weight:700;color:var(--cyan)}
+.card .l{color:var(--mut);font-size:.9rem}
+.bar{display:flex;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap}
+.bar input{flex:1;min-width:160px}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--mut);font-weight:500;font-size:.9rem;background:var(--panel)}
+tr:last-child td{border-bottom:0}
+td.act{white-space:nowrap;display:flex;gap:.3rem}
+.tag{display:inline-block;padding:.1rem .5rem;border-radius:99px;font-size:.8rem;background:var(--line)}
+.tag.ok{background:#14532d;color:var(--ok)}.tag.bad{background:#5b1a1a;color:var(--bad)}.tag.cy{background:#0c4a5e;color:var(--cyan)}
+.empty{padding:2rem;text-align:center;color:var(--mut)}
+dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);border-radius:14px;width:min(420px,92vw);padding:1.2rem}
+dialog::backdrop{background:#000a}
+dialog h2{margin:0 0 .5rem;font-size:1.1rem}
+pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;overflow:auto;font-size:.8rem;line-height:1.5}
+.note{color:var(--mut);max-width:60ch;line-height:1.5}
+.toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--cyan);padding:.6rem 1rem;border-radius:10px;z-index:9}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <h1>GDPS <b>MANAGER</b></h1>
+  <p class="note">Entra con tu cuenta para administrar tu GDPS.</p>
+  <label for="em">Correo</label><input id="em" type="email" autocomplete="email">
+  <label for="pw">Contraseña</label><input id="pw" type="password" autocomplete="current-password">
+  <div class="row">
+    <button class="pri" id="btnIn">Entrar</button>
+    <button id="btnUp">Crear cuenta</button>
+  </div>
+  <div class="msg" id="loginMsg"></div>
+</section>
+
+<section id="gate" class="hide" style="max-width:480px;margin:12vh auto;padding:1.5rem">
+  <h1 style="margin-top:0">Sin acceso de administrador</h1>
+  <p class="note" id="gateTxt"></p>
+  <div class="row"><button class="pri hide" id="btnClaim">Ser el primer admin</button><button id="btnOut2">Salir</button></div>
+  <div class="msg" id="gateMsg"></div>
+</section>
+
+<section id="app" class="hide">
+  <header>
+    <h1>GDPS <b>MANAGER</b></h1>
+    <div class="who"><span id="whoEm"></span><button class="sm" id="btnOut">Salir</button></div>
+  </header>
+  <nav id="nav"></nav>
+  <main id="view"></main>
+</section>
+
+<dialog id="dlg">
+  <form method="dialog" id="frm">
+    <h2 id="dlgT"></h2>
+    <div id="dlgF"></div>
+    <div class="row"><button class="pri" id="dlgOk" value="ok">Guardar</button><button value="cancel" type="button" id="dlgNo">Cancelar</button></div>
+  </form>
+</dialog>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,getDoc,writeBatch,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app=initializeApp({
+  apiKey:"AIzaSyDtTHh-lEkgbvYpkM_YApre2qHzTlyTeIM",
+  authDomain:"gdma-c6f47.firebaseapp.com",
+  projectId:"gdma-c6f47",
+  storageBucket:"gdma-c6f47.firebasestorage.app",
+  messagingSenderId:"37211496586",
+  appId:"1:37211496586:web:f4839f0b97b5db321d8d73"
+});
+const auth=getAuth(app), db=getFirestore(app);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------- Esquema de secciones ---------- */
+const S={
+  users:{label:"Usuarios",one:"usuario",fields:[
+    {k:"name",l:"Nombre"},{k:"email",l:"Correo",opt:1},
+    {k:"role",l:"Rol",t:"select",o:["user","mod","admin"],d:"user"},
+    {k:"stars",l:"Estrellas",t:"number",d:0}],
+    cols:["name","email","role","stars","banned"],
+    toggle:{k:"banned",on:"Desbanear",off:"Banear"}},
+  levels:{label:"Niveles",one:"nivel",fields:[
+    {k:"name",l:"Nombre del nivel"},{k:"author",l:"Autor"},
+    {k:"difficulty",l:"Dificultad",t:"select",o:["Auto","Easy","Normal","Hard","Harder","Insane","Demon"],d:"Normal"},
+    {k:"downloads",l:"Descargas",t:"number",d:0}],
+    cols:["name","author","difficulty","downloads","featured"],
+    toggle:{k:"featured",on:"Quitar destacado",off:"Destacar"}},
+  announcements:{label:"Anuncios",one:"anuncio",fields:[
+    {k:"title",l:"Título"},{k:"body",l:"Mensaje",t:"textarea"}],
+    cols:["title","body","createdAt"]},
+  reports:{label:"Reportes",one:"reporte",fields:[
+    {k:"target",l:"Usuario o nivel reportado"},{k:"reason",l:"Motivo",t:"textarea"}],
+    cols:["target","reason","createdAt","resolved"],
+    toggle:{k:"resolved",on:"Reabrir",off:"Resolver"}}
+};
+const TABS=["dashboard",...Object.keys(S),"reglas"];
+const NAMES={dashboard:"Resumen",reglas:"Reglas Firestore"};
+const data={users:[],levels:[],announcements:[],reports:[]};
+let tab="dashboard",q="",unsubs=[],me=null;
+
+/* ---------- Auth ---------- */
+const lm=m=>$("loginMsg").textContent=m;
+const errTxt=e=>({"auth/invalid-credential":"Correo o contraseña incorrectos.","auth/email-already-in-use":"Ese correo ya tiene cuenta. Pulsa Entrar.","auth/weak-password":"La contraseña necesita al menos 6 caracteres.","auth/invalid-email":"El correo no es válido.","auth/operation-not-allowed":"Activa Correo/Contraseña en Firebase → Authentication → Sign-in method.","permission-denied":"Firestore rechazó la acción. Revisa las reglas (pestaña Reglas Firestore)."}[e.code]||e.message);
+$("btnIn").onclick=()=>signInWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value).catch(e=>lm(errTxt(e)));
+$("btnUp").onclick=()=>createUserWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value).catch(e=>lm(errTxt(e)));
+$("btnOut").onclick=$("btnOut2").onclick=()=>signOut(auth);
+
+onAuthStateChanged(auth,async u=>{
+  unsubs.forEach(f=>f());unsubs=[];me=u;
+  ["login","gate","app"].forEach(i=>$(i).classList.add("hide"));
+  if(!u){$("login").classList.remove("hide");return}
+  try{
+    const a=await getDoc(doc(db,"admins",u.uid));
+    if(a.exists()){startApp(u);return}
+    const setup=await getDoc(doc(db,"config","setup"));
+    $("gate").classList.remove("hide");
+    $("btnClaim").classList.toggle("hide",setup.exists());
+    $("gateTxt").textContent=setup.exists()
+      ?"Tu cuenta no es administradora. Pide a un admin que cree el documento admins/"+u.uid+" en Firestore."
+      :"Aún no hay ningún administrador. Puedes reclamar ese puesto con esta cuenta.";
+  }catch(e){$("gate").classList.remove("hide");$("gateTxt").textContent="No se pudo comprobar tu acceso.";$("gateMsg").textContent=errTxt(e)}
+});
+$("btnClaim").onclick=async()=>{
+  try{
+    const b=writeBatch(db);
+    b.set(doc(db,"config","setup"),{by:me.uid,at:serverTimestamp()});
+    b.set(doc(db,"admins",me.uid),{email:me.email,at:serverTimestamp()});
+    await b.commit();location.reload();
+  }catch(e){$("gateMsg").textContent=errTxt(e)+" Publica primero las reglas de la pestaña Reglas Firestore (o crea admins/"+me.uid+" a mano)."}
+};
+
+function startApp(u){
+  $("app").classList.remove("hide");$("whoEm").textContent=u.email;
+  Object.keys(S).forEach(c=>unsubs.push(onSnapshot(collection(db,c),s=>{
+    data[c]=s.docs.map(d=>({id:d.id,...d.data()}));render();
+  },e=>toast(errTxt(e)))));
+  render();
+}
+
+/* ---------- UI ---------- */
+function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),3500)}
+function nav(){$("nav").innerHTML=TABS.map(t=>`<button data-t="${t}" class="${t===tab?"on":""}">${esc(NAMES[t]||S[t].label)}</button>`).join("");
+  $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;q="";render()})}
+function fmt(k,v){
+  if(k==="banned")return v?'<span class="tag bad">Baneado</span>':'<span class="tag ok">Activo</span>';
+  if(k==="featured")return v?'<span class="tag cy">Destacado</span>':"";
+  if(k==="resolved")return v?'<span class="tag ok">Resuelto</span>':'<span class="tag bad">Abierto</span>';
+  if(k==="createdAt")return v?.toDate?esc(v.toDate().toLocaleString()):"";
+  return esc(v);
+}
+function render(){
+  nav();const v=$("view");
+  if(tab==="dashboard"){
+    const c=(n,l)=>`<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`;
+    v.innerHTML=`<div class="cards">${c(data.users.length,"Usuarios")}${c(data.users.filter(x=>x.banned).length,"Baneados")}${c(data.levels.length,"Niveles")}${c(data.levels.filter(x=>x.featured).length,"Destacados")}${c(data.announcements.length,"Anuncios")}${c(data.reports.filter(x=>!x.resolved).length,"Reportes abiertos")}</div>
+    <p class="note" style="margin-top:1.5rem">Gestiona cada sección desde la barra de arriba. Los cambios se guardan al instante en Firestore y se ven en todos los dispositivos.</p>`;return;
+  }
+  if(tab==="reglas"){
+    v.innerHTML=`<p class="note">Copia estas reglas en Firebase → Firestore Database → Reglas → Publicar. Solo los admins podrán leer y escribir.</p><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp">Copiar reglas</button></div><pre>${esc(RULES)}</pre>`;
+    $("cp").onclick=()=>navigator.clipboard.writeText(RULES).then(()=>toast("Reglas copiadas"));return;
+  }
+  const s=S[tab];
+  const rows=data[tab].filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q.toLowerCase()))
+    .sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  const head=s.cols.map(k=>{const f=s.fields.find(f=>f.k===k);return `<th>${esc(f?f.l:({banned:"Estado",featured:"Destacado",resolved:"Estado",createdAt:"Fecha"})[k])}</th>`}).join("")+"<th></th>";
+  const body=rows.map(r=>`<tr>${s.cols.map(k=>`<td>${fmt(k,r[k])}</td>`).join("")}<td class="act">
+    ${s.toggle?`<button class="sm" data-a="tg" data-id="${r.id}">${r[s.toggle.k]?s.toggle.on:s.toggle.off}</button>`:""}
+    <button class="sm" data-a="ed" data-id="${r.id}">Editar</button>
+    <button class="sm dng" data-a="rm" data-id="${r.id}">Eliminar</button></td></tr>`).join("");
+  v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar en ${esc(s.label.toLowerCase())}" value="${esc(q)}"><button class="pri" id="add">Añadir ${s.one}</button></div>
+  <div class="wrap">${rows.length?`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`:`<div class="empty">No hay ${esc(s.label.toLowerCase())} todavía. Pulsa “Añadir ${s.one}”.</div>`}</div>`;
+  const qi=$("q");qi.oninput=()=>{q=qi.value;render();const n=$("q");n.focus();n.setSelectionRange(q.length,q.length)};
+  $("add").onclick=()=>form(null);
+  v.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>act(b.dataset.a,b.dataset.id));
+}
+async function act(a,id){
+  const s=S[tab],ref=doc(db,tab,id),r=data[tab].find(x=>x.id===id);
+  try{
+    if(a==="tg"){await updateDoc(ref,{[s.toggle.k]:!r[s.toggle.k]})}
+    else if(a==="rm"){if(confirm("¿Eliminar este "+s.one+"? No se puede deshacer."))await deleteDoc(ref)}
+    else form(r);
+  }catch(e){toast(errTxt(e))}
+}
+function form(r){
+  const s=S[tab];$("dlgT").textContent=(r?"Editar ":"Añadir ")+s.one;
+  $("dlgF").innerHTML=s.fields.map(f=>{
+    const val=r?r[f.k]:(f.d??"");const id="f_"+f.k;
+    const inp=f.t==="select"?`<select id="${id}">${f.o.map(o=>`<option ${o==val?"selected":""}>${esc(o)}</option>`).join("")}</select>`
+      :f.t==="textarea"?`<textarea id="${id}" rows="3">${esc(val)}</textarea>`
+      :`<input id="${id}" type="${f.t||"text"}" value="${esc(val)}">`;
+    return `<label for="${id}">${esc(f.l)}</label>${inp}`}).join("");
+  const dlg=$("dlg");dlg.showModal();
+  $("dlgNo").onclick=()=>dlg.close();
+  $("frm").onsubmit=async e=>{
+    e.preventDefault();const o={};
+    for(const f of s.fields){let x=$("f_"+f.k).value.trim();if(f.t==="number")x=Number(x)||0;
+      if(!x&&x!==0&&!f.opt){toast("Completa “"+f.l+"”");return}o[f.k]=x}
+    try{
+      if(r)await updateDoc(doc(db,tab,r.id),o);
+      else await addDoc(collection(db,tab),{...o,createdAt:serverTimestamp(),...(tab==="users"?{banned:false}:{}),...(tab==="levels"?{featured:false}:{}),...(tab==="reports"?{resolved:false}:{})});
+      dlg.close();toast("Guardado");
+    }catch(e){toast(errTxt(e))}
+  };
+}
+
+const RULES=String.raw`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function noSetup() {
+      return !exists(/databases/$(database)/documents/config/setup);
+    }
+    match /admins/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create: if request.auth != null && request.auth.uid == uid && noSetup();
+      allow update, delete: if isAdmin();
+    }
+    match /config/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && id == 'setup' && noSetup();
+    }
+    match /{col}/{id} {
+      allow read, write: if isAdmin();
+    }
+  }
+}`;
+</script>
+</body>
+</html>
