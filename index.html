@@ -69,6 +69,12 @@ h3{margin:1.5rem 0 .5rem}
 .tin{display:flex;gap:.5rem;margin-top:.6rem}
 .chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .8rem}
 .chips button{font-size:.85rem}.chips button.on{background:var(--pink);color:#fff}
+.n{font-size:1.8rem;font-weight:700;color:var(--cyan)}
+.tag.warn{background:#5b4a14;color:#ffd166}
+.arow{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem;margin-bottom:.5rem}
+.arow .btns{display:flex;gap:.3rem;flex-wrap:wrap}
+.snip{display:block;background:#0b0a1c;border-radius:8px;padding:.4rem .6rem;font-size:.8rem;overflow-x:auto;white-space:pre;margin:.3rem 0}
+.chk{display:flex;gap:.6rem;align-items:center;color:var(--tx);margin:.6rem 0}.chk input{width:auto}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -106,10 +112,19 @@ h3{margin:1.5rem 0 .5rem}
   <div class="msg" id="a_msg"></div>
 </dialog>
 
+<dialog id="permDlg">
+  <h2 id="pT">Permisos</h2>
+  <label class="chk"><input type="checkbox" id="p_posts"> Moderar Global (borrar publicaciones y mensajes, banear)</label>
+  <label class="chk"><input type="checkbox" id="p_apks"> Moderar APKs (borrar APKs)</label>
+  <label class="chk"><input type="checkbox" id="p_gdps"> Moderar GDPS Store (despublicar o borrar GDPS)</label>
+  <label class="chk"><input type="checkbox" id="p_admins"> Gestionar administradores (añadir, quitar, cambiar permisos)</label>
+  <div class="row"><button class="pri" id="pOk">Guardar</button><button id="pNo">Cancelar</button></div>
+</dialog>
+
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where,orderBy,limit,arrayUnion,arrayRemove,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where,orderBy,limit,arrayUnion,arrayRemove,getDocs,setDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getStorage,ref as sref,uploadBytesResumable,getDownloadURL,deleteObject} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const app=initializeApp({
@@ -149,9 +164,9 @@ let user=null,view="dir",cur=null,sub="ficha",q="",store=[],all=[],subData=[],su
 const mapDocs=s=>s.docs.map(d=>({id:d.id,...d.data()}));
 onSnapshot(query(collection(db,"gdps"),where("published","==",true)),s=>{store=mapDocs(s);render()},e=>toast(errTxt(e)));
 onAuthStateChanged(auth,u=>{
-  user=u;if(mineUnsub){mineUnsub();mineUnsub=null}all=[];
-  if(u){$("auth").close();mineUnsub=onSnapshot(query(collection(db,"gdps"),where("ownerUid","==",u.uid)),s=>{all=mapDocs(s);render()},e=>toast(errTxt(e)))}
-  else if(["mine","gdps","terminal"].includes(view))view="dir";
+  user=u;stopAdmin();if(mineUnsub){mineUnsub();mineUnsub=null}all=[];
+  if(u){$("auth").close();startUser(u);mineUnsub=onSnapshot(query(collection(db,"gdps"),where("ownerUid","==",u.uid)),s=>{all=mapDocs(s);render()},e=>toast(errTxt(e)))}
+  else if(["mine","gdps","terminal","admin"].includes(view))view="dir";
   render()});
 
 /* ---------- Auth ---------- */
@@ -188,7 +203,7 @@ function read(fields,pre){
 
 /* ---------- Render ---------- */
 function setNav(){
-  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);t.push(["rules","Reglas"]);
+  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"],["scan","Escáner"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);if(myAdmin||(user&&!setupExists))t.push(["admin","Admin"]);t.push(["rules","Reglas"]);
   $("nav").innerHTML=t.map(([k,l])=>`<button data-v="${k}" class="${(view===k||(view==="gdps"&&k==="mine"))?"on":""}">${l}</button>`).join("");
   $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.v));
   $("who").innerHTML=user?`<span>${esc(user.email)}</span><button class="sm" id="out">Salir</button>`:`<button class="pri sm" id="inb">Entrar</button>`;
@@ -209,6 +224,8 @@ function render(){
   if(view==="global"){renderGlobal();return}
   if(view==="apk"){renderApk();return}
   if(view==="terminal"){renderTerminal();return}
+  if(view==="scan"){renderScan();return}
+  if(view==="admin"){renderAdmin();return}
   if(view==="rules"){
     v.innerHTML=`<p class="note">Copia cada bloque donde corresponde y toca Publicar.</p>
     <h3>1. Firebase → Firestore → Reglas</h3><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp">Copiar reglas de Firestore</button></div><pre>${esc(RULES)}</pre>
@@ -307,6 +324,7 @@ function renderGlobal(){
     if(!user)$("gin").onclick=openAuth;
     else{
       const send=async()=>{
+        if(isBanned){toast("Un administrador te baneó de Global y APKs.");return}
         const el=$(gsub==="posts"?"gp":"gc"),text=el.value.trim();if(!text)return;
         try{await addDoc(collection(db,gsub==="posts"?"global_posts":"global_chat"),{uid:user.uid,author:aname(),text,...(gsub==="posts"?{likes:[]}:{}),createdAt:serverTimestamp()});el.value=""}
         catch(e){toast(errTxt(e))}
@@ -320,7 +338,7 @@ function renderGlobal(){
     L.className="";
     L.innerHTML=posts.length?posts.map(p=>{
       const n=(p.likes||[]).length,liked=user&&(p.likes||[]).includes(user.uid);
-      return `<div class="card post"><div class="l"><b>${esc(p.author)}</b> · ${esc(when(p.createdAt))}</div><p class="pre">${esc(p.text)}</p><div class="row" style="margin:0"><button class="sm" data-l="${p.id}">${liked?"💜":"🤍"} ${n}</button>${user&&p.uid===user.uid?`<button class="sm dng" data-d="${p.id}">Eliminar</button>`:""}</div></div>`}).join(""):'<div class="empty">Aún no hay publicaciones. Sé el primero.</div>';
+      return `<div class="card post"><div class="l"><b>${esc(p.author)}</b> · ${esc(when(p.createdAt))}</div><p class="pre">${esc(p.text)}</p><div class="row" style="margin:0"><button class="sm" data-l="${p.id}">${liked?"💜":"🤍"} ${n}</button>${user&&(p.uid===user.uid||can("posts"))?`<button class="sm dng" data-d="${p.id}">Eliminar</button>`:""}</div></div>`}).join(""):'<div class="empty">Aún no hay publicaciones. Sé el primero.</div>';
     L.querySelectorAll("[data-l]").forEach(b=>b.onclick=async()=>{
       if(!user){openAuth();return}
       const p=posts.find(x=>x.id===b.dataset.l);
@@ -329,7 +347,7 @@ function renderGlobal(){
     L.querySelectorAll("[data-d]").forEach(b=>b.onclick=async()=>{if(!confirm("¿Eliminar tu publicación?"))return;try{await deleteDoc(doc(db,"global_posts",b.dataset.d))}catch(e){toast(errTxt(e))}});
   }else{
     L.className="chatbox";
-    L.innerHTML=chat.length?[...chat].reverse().map(m=>`<div class="cm${user&&m.uid===user.uid?" me":""}"><div class="l"><b>${esc(m.author)}</b> · ${esc(when(m.createdAt))}${user&&m.uid===user.uid?` <a href="#" data-d="${m.id}">borrar</a>`:""}</div><div class="pre">${esc(m.text)}</div></div>`).join(""):'<div class="empty">Nadie ha escrito todavía. Di hola 👋</div>';
+    L.innerHTML=chat.length?[...chat].reverse().map(m=>`<div class="cm${user&&m.uid===user.uid?" me":""}"><div class="l"><b>${esc(m.author)}</b> · ${esc(when(m.createdAt))}${user&&(m.uid===user.uid||can("posts"))?` <a href="#" data-d="${m.id}">borrar</a>`:""}</div><div class="pre">${esc(m.text)}</div></div>`).join(""):'<div class="empty">Nadie ha escrito todavía. Di hola 👋</div>';
     L.querySelectorAll("[data-d]").forEach(a=>a.onclick=async e=>{e.preventDefault();try{await deleteDoc(doc(db,"global_chat",a.dataset.d))}catch(er){toast(errTxt(er))}});
     L.scrollTop=L.scrollHeight;
   }
@@ -339,7 +357,7 @@ function renderApk(){
   const v=$("view");
   const rows=apks.filter(a=>!q||(a.name+a.author+a.desc).toLowerCase().includes(q.toLowerCase()));
   v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar APK" value="${esc(q)}">${user?'<button class="pri" id="up">Subir APK</button>':'<button class="pri" id="inb3">Entrar para subir un APK</button>'}</div>
-  ${rows.length?`<div class="grid">${rows.map(a=>`<div class="card"><h3>${esc(a.name)}</h3><div class="l">${a.version?esc("v"+a.version)+" · ":""}por ${esc(a.author)}${a.size?" · "+fmtSize(a.size):""}</div>${a.desc?`<p>${esc(a.desc)}</p>`:""}<div class="links"><a href="${url(a.url)}" target="_blank" rel="noopener">Descargar</a><button class="sm" data-c="${a.id}">Copiar link</button>${user&&a.uid===user.uid?`<button class="sm dng" data-x="${a.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Todavía no hay APKs. Sube el primero.</div>'}`;
+  ${rows.length?`<div class="grid">${rows.map(a=>`<div class="card"><h3>${esc(a.name)}</h3><div class="l">${a.version?esc("v"+a.version)+" · ":""}por ${esc(a.author)}${a.size?" · "+fmtSize(a.size):""}</div>${a.desc?`<p>${esc(a.desc)}</p>`:""}<div class="links"><a href="${url(a.url)}" target="_blank" rel="noopener">Descargar</a><button class="sm" data-c="${a.id}">Copiar link</button>${user&&(a.uid===user.uid||can("apks"))?`<button class="sm dng" data-x="${a.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Todavía no hay APKs. Sube el primero.</div>'}`;
   keepSearch(renderApk);
   if(user)$("up").onclick=openApk;else $("inb3").onclick=openAuth;
   v.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>copy(apks.find(x=>x.id===b.dataset.c).url));
@@ -356,6 +374,7 @@ function openApk(){
 $("apkNo").onclick=()=>$("apkDlg").close();
 $("apkOk").onclick=async()=>{
   const name=$("a_name").value.trim(),version=$("a_ver").value.trim(),desc=$("a_desc").value.trim(),file=$("a_file").files[0],link=$("a_link").value.trim();
+  if(isBanned){am2("Un administrador te baneó de Global y APKs.");return}
   if(!name){am2("Escribe el nombre del APK.");return}
   if(link&&!/^https?:\/\//i.test(link)){am2("El link debe empezar con https://");return}
   if(!file&&!link){am2("Elige un archivo o pega un link.");return}
@@ -517,24 +536,372 @@ async function plat(c,a,line){
   print("Comando desconocido: "+c+". Escribe ayuda.","err");
 }
 
+/* ---------- Administración ---------- */
+let myAdmin=null,setupExists=true,isBanned=false,adUnsubs=[],userUnsubs=[],asub="resumen";
+let adm={profiles:[],admins:[],bans:[],gdpsAll:[]};
+const can=p=>!!myAdmin&&(myAdmin.role==="owner"||(myAdmin.perms||{})[p]===true);
+const PN={posts:"Global",apks:"APKs",gdps:"GDPS Store",admins:"Admins"};
+function stopAdmin(){adUnsubs.forEach(f=>f());adUnsubs=[];userUnsubs.forEach(f=>f());userUnsubs=[];myAdmin=null;setupExists=true;isBanned=false;adm={profiles:[],admins:[],bans:[],gdpsAll:[]}}
+function startUser(u){
+  setDoc(doc(db,"profiles",u.uid),{email:u.email,name:(u.email||"").split("@")[0],lastSeen:serverTimestamp()},{merge:true}).catch(()=>{});
+  userUnsubs.push(onSnapshot(doc(db,"config","setup"),s=>{setupExists=s.exists();render()},()=>{}));
+  userUnsubs.push(onSnapshot(doc(db,"bans",u.uid),s=>{isBanned=s.exists();render()},()=>{}));
+  userUnsubs.push(onSnapshot(doc(db,"admins",u.uid),s=>{
+    const was=!!myAdmin;myAdmin=s.exists()?s.data():null;
+    if(myAdmin&&!was)startAdmin();
+    if(!myAdmin&&was){adUnsubs.forEach(f=>f());adUnsubs=[]}
+    render()},()=>{}));
+}
+function startAdmin(){
+  const sub=(c,k)=>adUnsubs.push(onSnapshot(collection(db,c),s=>{adm[k]=mapDocs(s);if(view==="admin")render()},e=>toast(errTxt(e))));
+  sub("profiles","profiles");sub("admins","admins");sub("bans","bans");sub("gdps","gdpsAll");
+}
+function openPerms(title,perms,onSave){
+  $("pT").textContent=title;
+  ["posts","apks","gdps","admins"].forEach(k=>$("p_"+k).checked=!!perms[k]);
+  $("permDlg").showModal();$("pNo").onclick=()=>$("permDlg").close();
+  $("pOk").onclick=async()=>{const o={};["posts","apks","gdps","admins"].forEach(k=>o[k]=$("p_"+k).checked);
+    try{await onSave(o);$("permDlg").close();toast("Guardado")}catch(e){toast(errTxt(e))}};
+}
+function renderAdmin(){
+  const v=$("view");
+  if(!user){view="dir";render();return}
+  if(!myAdmin){
+    if(setupExists){view="dir";render();return}
+    v.innerHTML='<div class="card" style="max-width:520px"><h3>Aún no hay administrador</h3><p>Nadie ha reclamado el panel. La primera cuenta que lo reclame será el <b>dueño</b>: tiene todos los permisos y no se le puede quitar. Hazlo solo si eres el dueño de la plataforma.</p><div class="row"><button class="pri" id="claim">Ser el dueño</button></div></div>';
+    $("claim").onclick=async()=>{
+      try{const b=writeBatch(db);
+        b.set(doc(db,"admins",user.uid),{email:user.email,role:"owner",perms:{posts:true,apks:true,gdps:true,admins:true},createdAt:serverTimestamp()});
+        b.set(doc(db,"config","setup"),{by:user.uid,at:serverTimestamp()});
+        await b.commit();toast("Ahora eres el dueño")}catch(e){toast(errTxt(e))}
+    };
+    return;
+  }
+  const subs=[["resumen","Resumen"],["usuarios","Usuarios"],["admins","Admins"],["mod","Moderación"]];
+  v.innerHTML=`<div class="sub">${subs.map(([k,l])=>`<button data-a="${k}" class="${k===asub?"on":""}">${l}</button>`).join("")}</div><div id="abody"></div>`;
+  v.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{asub=b.dataset.a;q="";renderAdmin()});
+  const B=$("abody"),isAdm=id=>adm.admins.some(a=>a.id===id),isBan=id=>adm.bans.some(b=>b.id===id);
+  const permTxt=a=>a.role==="owner"?"todos":(Object.keys(PN).filter(k=>(a.perms||{})[k]).map(k=>PN[k]).join(", ")||"ninguno");
+  if(asub==="resumen"){
+    const c=(n,l)=>`<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`;
+    B.innerHTML=`<p class="note">Tu rol: <b>${myAdmin.role==="owner"?"dueño":"admin"}</b> · permisos: ${esc(permTxt(myAdmin))}</p><div class="grid">${c(adm.profiles.length,"Usuarios registrados")}${c(adm.admins.length,"Administradores")}${c(adm.bans.length,"Baneados")}${c(adm.gdpsAll.length,"GDPS registrados")}${c(adm.gdpsAll.filter(g=>g.published).length,"GDPS publicados")}${c(apks.length,"APKs")}${c(posts.length,"Publicaciones")}${c(chat.length,"Mensajes de chat")}</div>`;
+  }else if(asub==="usuarios"){
+    const rows=adm.profiles.filter(p=>!q||((p.name||"")+(p.email||"")).toLowerCase().includes(q.toLowerCase()));
+    B.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar usuario o correo" value="${esc(q)}"></div>
+    ${rows.length?rows.map(p=>`<div class="arow"><div><b>${esc(p.name)}</b> ${isAdm(p.id)?'<span class="tag cy">Admin</span>':""} ${isBan(p.id)?'<span class="tag bad">Baneado</span>':""}<div class="l">${esc(p.email)}</div></div><div class="btns">${can("posts")&&!isAdm(p.id)&&p.id!==user.uid?(isBan(p.id)?`<button class="sm" data-k="unban" data-id="${p.id}">Quitar ban</button>`:`<button class="sm dng" data-k="ban" data-id="${p.id}">Banear</button>`):""}${can("admins")&&!isAdm(p.id)?`<button class="sm pri" data-k="mkadm" data-id="${p.id}">Hacer admin</button>`:""}</div></div>`).join(""):'<div class="empty">Los usuarios aparecen aquí cuando inician sesión.</div>'}`;
+    keepSearch(renderAdmin);
+  }else if(asub==="admins"){
+    B.innerHTML=adm.admins.map(a=>`<div class="arow"><div><b>${esc(a.email)}</b> <span class="tag ${a.role==="owner"?"warn":"cy"}">${a.role==="owner"?"Dueño":"Admin"}</span><div class="l">Permisos: ${esc(permTxt(a))}</div></div><div class="btns">${can("admins")&&a.role!=="owner"&&a.id!==user.uid?`<button class="sm" data-k="perm" data-id="${a.id}">Permisos</button><button class="sm dng" data-k="rmadm" data-id="${a.id}">Quitar</button>`:""}</div></div>`).join("")+(can("admins")?'<p class="note">Para añadir un admin, pídele que inicie sesión una vez y búscalo en la pestaña Usuarios.</p>':"");
+  }else{
+    const sec=(t,items)=>`<h3>${t}</h3>${items.length?items.join(""):'<div class="empty">Nada por aquí.</div>'}`;
+    const row=(a,b,btn)=>`<div class="arow"><div>${a}<div class="l">${b}</div></div><div class="btns">${btn}</div></div>`;
+    let h="";
+    if(can("gdps"))h+=sec("GDPS Store",adm.gdpsAll.slice(0,30).map(g=>row(`<b>${esc(g.name)}</b> ${g.published?'<span class="tag ok">Publicado</span>':'<span class="tag">Borrador</span>'}`,"por "+esc(g.owner),(g.published?`<button class="sm" data-k="unpub" data-id="${g.id}">Despublicar</button>`:"")+`<button class="sm dng" data-k="delg" data-id="${g.id}">Eliminar</button>`)));
+    if(can("posts")){
+      h+=sec("Publicaciones",posts.slice(0,20).map(x=>row(`<b>${esc(x.author)}</b>`,esc((x.text||"").slice(0,90)),`<button class="sm dng" data-k="delp" data-id="${x.id}">Eliminar</button>`)));
+      h+=sec("Chat",chat.slice(0,20).map(x=>row(`<b>${esc(x.author)}</b>`,esc((x.text||"").slice(0,90)),`<button class="sm dng" data-k="delc" data-id="${x.id}">Eliminar</button>`)));
+      h+=sec("Baneados",adm.bans.map(b=>row(`<b>${esc(b.name||b.id)}</b>`,"No puede publicar ni subir APKs",`<button class="sm" data-k="unban" data-id="${b.id}">Quitar ban</button>`)));
+    }
+    if(can("apks"))h+=sec("APKs",apks.slice(0,20).map(x=>row(`<b>${esc(x.name)}</b>`,"por "+esc(x.author),`<button class="sm dng" data-k="dela" data-id="${x.id}">Eliminar</button>`)));
+    B.innerHTML=h||'<div class="empty">No tienes permisos de moderación.</div>';
+  }
+  B.onclick=async e=>{
+    const b=e.target.closest("button[data-k]");if(!b)return;
+    const k=b.dataset.k,id=b.dataset.id;
+    try{
+      if(k==="unpub")await updateDoc(doc(db,"gdps",id),{published:false});
+      else if(k==="delg"){if(confirm("¿Eliminar este GDPS?"))await deleteDoc(doc(db,"gdps",id))}
+      else if(k==="delp"){if(confirm("¿Eliminar esta publicación?"))await deleteDoc(doc(db,"global_posts",id))}
+      else if(k==="delc")await deleteDoc(doc(db,"global_chat",id));
+      else if(k==="dela"){const a=apks.find(x=>x.id===id);if(confirm("¿Eliminar este APK?")){await deleteDoc(doc(db,"apks",id));if(a&&a.path)deleteObject(sref(storage,a.path)).catch(()=>{})}}
+      else if(k==="ban"){const p=adm.profiles.find(x=>x.id===id);await setDoc(doc(db,"bans",id),{by:user.uid,name:p?p.name:"",createdAt:serverTimestamp()});toast("Baneado de Global y APKs")}
+      else if(k==="unban")await deleteDoc(doc(db,"bans",id));
+      else if(k==="mkadm"){const p=adm.profiles.find(x=>x.id===id);openPerms("Hacer admin a "+p.name,{},perms=>setDoc(doc(db,"admins",id),{email:p.email,role:"admin",perms,addedBy:user.uid,createdAt:serverTimestamp()}))}
+      else if(k==="perm"){const a=adm.admins.find(x=>x.id===id);openPerms("Permisos de "+a.email,a.perms||{},perms=>updateDoc(doc(db,"admins",id),{perms}))}
+      else if(k==="rmadm"){if(confirm("¿Quitar a este administrador?"))await deleteDoc(doc(db,"admins",id))}
+    }catch(er){toast(errTxt(er))}
+  };
+}
+
+/* ---------- Escáner de archivos del GDPS ---------- */
+/*SCAN_START*/
+const TEXT_EXT=new Set(["php","inc","phtml","js","json","html","htm","txt","env","conf","ini","htaccess","md","xml","yml","yaml","cfg","sh","py"]);
+const PHP_EXT=new Set(["php","inc","phtml"]);
+const SEV_N={high:"Alta",med:"Media",low:"Baja"};
+const FIX={
+ sqli_in:"Usa consultas preparadas (PDO prepare + execute con parámetros) y valida el tipo del dato. Nunca pegues datos del usuario dentro del texto SQL.",
+ sqli_var:"Si la variable viene del usuario, usa una consulta preparada con parámetros. Si es un número, conviértelo con (int) antes de usarlo.",
+ inc_in:"No incluyas archivos según datos del usuario. Usa una lista fija de archivos permitidos.",
+ backdoor:"Revisa el archivo ahora mismo: este patrón lo usan las puertas traseras. Si no lo escribiste tú, bórralo, cambia contraseñas y claves y revisa quién tuvo acceso.",
+ eval:"Evita eval(). Busca otra forma de lograr lo mismo y, si no lo escribiste tú, revísalo.",
+ cmd:"Evita ejecutar comandos del sistema. Si es imprescindible, no uses datos del usuario y valida contra una lista fija.",
+ unser:"No uses unserialize() con datos del usuario; usa JSON (json_decode).",
+ extract:"No uses extract() con datos del usuario: puede sobrescribir variables internas.",
+ fileget:"No leas archivos ni URLs según datos del usuario. Valida contra una lista fija o dominios permitidos.",
+ xss:"Escapa lo que muestras con htmlspecialchars($x, ENT_QUOTES, 'UTF-8') o conviértelo a número si lo es.",
+ phpinfo:"Borra phpinfo() o protege el archivo: revela versiones y rutas del servidor.",
+ weakhash:"Guarda contraseñas con password_hash() y compruébalas con password_verify().",
+ mysql_old:"Migra a PDO o mysqli con consultas preparadas; mysql_* ya no existe en PHP moderno.",
+ upload:"Valida extensión, tipo y tamaño, renombra el archivo y guárdalo fuera de la carpeta pública o sin permiso de ejecución.",
+ creds:"Guarda las credenciales en un archivo de configuración fuera de la carpeta pública (o bloqueado con .htaccess) y cámbialas si se filtraron.",
+ disp:"Desactiva display_errors en producción y registra los errores en un archivo.",
+ cors:"Limita Access-Control-Allow-Origin a tu dominio en los endpoints sensibles.",
+ ssl:"No desactives la verificación SSL; instala los certificados correctos.",
+ secret:"El «secret» del juego es público. No lo uses como única protección: valida cuenta y contraseña en cada acción.",
+ rand:"Para tokens y contraseñas usa random_bytes() (por ejemplo bin2hex(random_bytes(16))).",
+ f_env:"Saca el archivo de la carpeta pública o bloquéalo, y cambia las claves que contenga.",
+ f_sql:"Borra el volcado de la web o muévelo fuera: puede contener usuarios y contraseñas.",
+ f_git:"Quita la carpeta .git de la web: contiene todo el código y su historial.",
+ f_shell:"Revisa el archivo: ese nombre es típico de puertas traseras. Si no es tuyo, bórralo y revisa el servidor.",
+ f_info:"Borra los archivos de prueba o protégelos.",
+ f_dbtool:"Protégelo con contraseña extra o por IP, o quítalo de la web.",
+ f_bak:"Borra copias viejas de la web: se pueden descargar con solo saber el nombre.",
+ f_zip:"No dejes respaldos comprimidos en la carpeta pública.",
+ f_log:"Bloquea los logs o muévelos fuera de la web: pueden revelar datos."
+};
+const SGX=/\$_(GET|POST|REQUEST|COOKIE)/;
+const LRULES=[
+ {id:"inc_in",sev:"high",name:"Inclusión de archivo con entrada del usuario",t:l=>/\b(include|require)(_once)?\b[^;]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"backdoor",sev:"high",name:"Código ofuscado (posible puerta trasera)",t:l=>/\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|gzuncompress|str_rot13)/i.test(l)},
+ {id:"eval",sev:"high",name:"Uso de eval()",t:l=>/(?<![\w$>:])eval\s*\(/i.test(l)&&!/\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|gzuncompress|str_rot13)/i.test(l)},
+ {id:"cmd",sev:"high",name:"Ejecución de comandos del sistema",t:l=>/(?<![\w$>:])(system|shell_exec|passthru|popen|proc_open|pcntl_exec|exec)\s*\(/i.test(l)},
+ {id:"unser",sev:"high",name:"unserialize() con entrada del usuario",t:l=>/unserialize\s*\([^)]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"extract",sev:"high",name:"extract() sobre datos del usuario",t:l=>/\bextract\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"fileget",sev:"med",name:"Lectura de archivo o URL con entrada del usuario",t:l=>/\b(file_get_contents|fopen|readfile|curl_init)\s*\([^)]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"xss",sev:"med",name:"Salida sin escapar (posible XSS)",t:l=>/\b(echo|print)\b[^;]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)&&!/htmlspecialchars|htmlentities|intval|\(int\)|ExploitPatch|filter_var|strip_tags|escape|json_encode/i.test(l)},
+ {id:"phpinfo",sev:"med",name:"phpinfo() accesible",t:l=>/\bphpinfo\s*\(/i.test(l)},
+ {id:"weakhash",sev:"med",name:"Hash débil para contraseñas",t:l=>/\b(md5|sha1)\s*\(/i.test(l)&&/pass/i.test(l)},
+ {id:"mysql_old",sev:"med",name:"API mysql_* obsoleta",t:l=>/\bmysql_(query|connect|fetch_\w+|real_escape_string)\s*\(/i.test(l)},
+ {id:"upload",sev:"med",name:"Subida de archivos sin revisar",t:l=>/\bmove_uploaded_file\s*\(/i.test(l)},
+ {id:"creds",sev:"med",name:"Credenciales escritas en el código",mask:1,t:l=>/\$(password|pass|dbpass|db_pass|dbpassword)\s*=\s*(["'])[^"']{3,}\2/i.test(l)||/new\s+PDO\s*\(\s*["'][^"']*["']\s*,\s*["'][^"']*["']\s*,\s*["'][^"']+["']/i.test(l)||/mysqli_connect\s*\([^)]*,\s*["'][^"']+["']\s*,\s*["'][^"']+["']/i.test(l)},
+ {id:"disp",sev:"low",name:"Muestra errores en pantalla",t:l=>/ini_set\s*\(\s*["']display_errors["']\s*,\s*["']?(1|on|true)/i.test(l)},
+ {id:"cors",sev:"low",name:"CORS abierto a cualquier sitio",t:l=>/Access-Control-Allow-Origin\s*:\s*\*/i.test(l)},
+ {id:"ssl",sev:"low",name:"Verificación SSL desactivada",t:l=>/CURLOPT_SSL_VERIFY(PEER|HOST)\s*,\s*(false|0)/i.test(l)},
+ {id:"secret",sev:"low",name:"El «secret» del juego no es una protección",t:l=>/Wmfd2893gb7/.test(l)},
+ {id:"rand",sev:"low",name:"Número aleatorio débil para tokens",t:l=>/\b(rand|mt_rand)\s*\(/i.test(l)&&/(token|pass|key|hash|salt)/i.test(l)}
+];
+const FRULES=[
+ {id:"f_env",sev:"high",name:"Archivo .env en la carpeta del GDPS",re:/(^|\/)\.env(\.|$)/i},
+ {id:"f_sql",sev:"high",name:"Volcado de base de datos en la carpeta",re:/\.sql(\.gz)?$/i},
+ {id:"f_git",sev:"high",name:"Carpeta .git incluida",re:/(^|\/)\.git(\/|$)/i},
+ {id:"f_shell",sev:"high",name:"Nombre típico de web shell",re:/(^|\/)(c99|r57|wso|b374k|shell|cmd|webshell)\.php$/i},
+ {id:"f_info",sev:"med",name:"Archivo de pruebas o diagnóstico",re:/(^|\/)(phpinfo|info|test|debug|tmp)\.php$/i},
+ {id:"f_dbtool",sev:"med",name:"Gestor de base de datos dentro de la web",re:/(^|\/)(adminer|phpmyadmin)/i},
+ {id:"f_bak",sev:"med",name:"Copia de seguridad accesible",re:/(\.(bak|old|orig|save|swp)|~)$/i},
+ {id:"f_zip",sev:"low",name:"Archivo comprimido dentro de la web",re:/\.(zip|tar|gz|rar|7z)$/i},
+ {id:"f_log",sev:"low",name:"Archivo de log accesible",re:/\.log$/i}
+];
+const SQLRE=/(?:->|::)\s*(?:query|exec|prepare)\s*\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')(\s*\.\s*\$)?|\bmysqli?_query\s*\([^,]+,\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')(\s*\.\s*\$)?/gi;
+const maskLine=l=>l.replace(/(=\s*|,\s*)(["'])[^"']{3,}\2/g,'$1"••••"');
+function scanAll(files){
+  const out=[],capR={};
+  for(const f of files){
+    const cap={};
+    const add=(r,line,snip,sev)=>{const k=r.id;cap[k]=(cap[k]||0)+1;if(cap[k]>25)return;out.push({id:r.id,sev:sev||r.sev,name:r.name,fix:FIX[r.id]||"",file:f.path,line,snippet:snip})};
+    for(const r of FRULES){if(r.re.test(f.path)){capR[r.id]=(capR[r.id]||0)+1;if(capR[r.id]<=15)out.push({id:r.id,sev:r.sev,name:r.name,fix:FIX[r.id]||"",file:f.path,line:0,snippet:""})}}
+    if(!f.text||!PHP_EXT.has(f.ext))continue;
+    const lines=f.text.split("\n");
+    for(let i=0;i<lines.length;i++){
+      const l=lines[i];if(l.length>2000)continue;
+      const tl=l.trim();if(!tl||/^(\/\/|#|\*|\/\*)/.test(tl))continue;
+      for(const r of LRULES){
+        if(r.t(l)){
+          const lowCfg=r.id==="creds"&&/config|connection/i.test(f.path);
+          add(r,i+1,(r.mask?maskLine(l):l).trim().slice(0,160),lowCfg?"low":null);
+        }
+      }
+    }
+    SQLRE.lastIndex=0;let m;
+    while((m=SQLRE.exec(f.text))){
+      const lit=m[1]||m[3],concat=m[2]||m[4];
+      const body=lit.slice(1,-1),dq=lit[0]==='"';
+      const interp=dq&&/(^|[^\\])\$[A-Za-z_{]/.test(body);
+      const rest=f.text.slice(m.index+m[0].length,m.index+m[0].length+120).split(";")[0];
+      const sg=SGX.test(body)||(concat&&SGX.test(concat+rest));
+      if(!(interp||concat))continue;
+      const line=f.text.slice(0,m.index).split("\n").length;
+      const r=sg?{id:"sqli_in",sev:"high",name:"Entrada del usuario dentro de una consulta SQL"}:{id:"sqli_var",sev:"med",name:"Consulta SQL armada con variables"};
+      add(r,line,(lines[line-1]||"").trim().slice(0,160));
+    }
+  }
+  const o={high:0,med:1,low:2};
+  out.sort((a,b)=>o[a.sev]-o[b.sev]);
+  return out;
+}
+/*SCAN_END*/
+const extOf=n=>{const b=n.split("/").pop();return b.includes(".")?b.split(".").pop().toLowerCase():""};
+let sfiles=[],sres=[],sdone=false,ssub="vuln";
+function loadJSZip(){return window.JSZip?Promise.resolve(window.JSZip):new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=()=>res(window.JSZip);s.onerror=()=>rej(new Error("No se pudo cargar el lector de .zip"));document.head.append(s)})}
+function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.append(a);a.click();a.remove()}
+function renderScan(){
+  if($("sshell"))return;
+  const v=$("view");
+  v.innerHTML=`<div id="sshell"><div class="card" style="margin-bottom:1rem"><b>Escáner de archivos del GDPS</b>
+    <p class="note">Elige los archivos de tu GDPS (varios .php, o un .zip). Se analizan <b>en tu dispositivo</b>: no se suben a ningún servidor. Es un análisis por patrones: puede dar falsos positivos y no detecta todo, así que revisa cada hallazgo. Úsalo solo con tu propio GDPS o con permiso de su dueño.</p>
+    <input type="file" id="s_files" multiple>
+    <div class="row"><button class="pri" id="s_go">Analizar</button><span class="l" id="s_status"></span></div></div>
+    <div class="sub"><button data-s="vuln">Vulnerabilidades</button><button data-s="grep">Buscar</button><button data-s="files">Archivos</button></div><div id="sbody"></div></div>`;
+  v.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{ssub=b.dataset.s;drawScan()});
+  $("s_go").onclick=scanRun;
+  drawScan();
+}
+async function scanRun(){
+  const picked=[...$("s_files").files],st=$("s_status");
+  if(!picked.length){st.textContent="Elige al menos un archivo.";return}
+  $("s_go").disabled=true;sfiles=[];
+  try{
+    for(const f of picked){
+      if(sfiles.length>=3000)break;
+      if(/\.zip$/i.test(f.name)){
+        if(f.size>2e8){st.textContent="El .zip pasa de 200 MB; usa uno más pequeño.";continue}
+        st.textContent="Leyendo "+f.name+"…";
+        const Z=await loadJSZip(),z=await Z.loadAsync(f);
+        let n=0;
+        for(const name of Object.keys(z.files)){
+          const en=z.files[name];if(en.dir)continue;
+          if(sfiles.length>=3000)break;
+          const ext=extOf(name);let text=null;
+          if(TEXT_EXT.has(ext)){const t=await en.async("string");if(t.length<=2000000)text=t}
+          sfiles.push({path:name,ext,size:text?text.length:null,text});
+          if(++n%50===0){st.textContent="Leyendo… "+sfiles.length+" archivos";await new Promise(r=>setTimeout(r))}
+        }
+      }else{
+        const ext=extOf(f.name);let text=null;
+        if(TEXT_EXT.has(ext)&&f.size<=2000000)text=await f.text();
+        sfiles.push({path:f.webkitRelativePath||f.name,ext,size:f.size,text});
+      }
+    }
+    st.textContent="Analizando…";await new Promise(r=>setTimeout(r));
+    sres=scanAll(sfiles);sdone=true;
+    st.textContent=`${sfiles.length} archivos (${sfiles.filter(f=>f.text).length} leídos como texto) · ${sres.length} hallazgos`;
+  }catch(e){st.textContent="Error: "+e.message}
+  $("s_go").disabled=false;drawScan();
+}
+function drawScan(){
+  document.querySelectorAll("#sshell [data-s]").forEach(b=>b.classList.toggle("on",b.dataset.s===ssub));
+  const B=$("sbody");
+  if(!sdone){B.innerHTML='<div class="empty">Elige archivos y toca Analizar.</div>';return}
+  if(ssub==="vuln"){
+    const cnt=s=>sres.filter(x=>x.sev===s).length;
+    const rules=[...new Map(sres.map(x=>[x.id,x.name])).entries()];
+    B.innerHTML=`<div class="grid" style="margin-bottom:1rem"><div class="card"><div class="n" style="color:var(--bad)">${cnt("high")}</div><div class="l">Alta</div></div><div class="card"><div class="n" style="color:#ffd166">${cnt("med")}</div><div class="l">Media</div></div><div class="card"><div class="n">${cnt("low")}</div><div class="l">Baja</div></div></div>
+    <div class="bar"><select id="f_sev" style="width:auto"><option value="all">Toda severidad</option><option value="high">Alta</option><option value="med">Media</option><option value="low">Baja</option></select>
+    <select id="f_rule" style="width:auto;max-width:100%"><option value="all">Todos los tipos</option>${rules.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join("")}</select>
+    <input id="f_q" placeholder="Filtrar por archivo o texto"></div>
+    <div class="row" style="margin:0 0 1rem"><button class="sm" id="r_txt">Descargar reporte .txt</button><button class="sm" id="r_csv">Descargar .csv</button></div><div id="slist"></div>`;
+    ["f_sev","f_rule"].forEach(i=>$(i).onchange=fillVuln);$("f_q").oninput=fillVuln;
+    $("r_txt").onclick=()=>dl("reporte-gdps.txt",reportTxt(),"text/plain");
+    $("r_csv").onclick=()=>dl("reporte-gdps.csv",reportCsv(),"text/csv");
+    fillVuln();
+  }else if(ssub==="grep"){
+    B.innerHTML=`<div class="bar"><input id="g_q" placeholder="Texto o patrón a buscar en el código"><input id="g_ext" placeholder="extensión (ej: php)" style="max-width:9rem"></div><label class="chk"><input type="checkbox" id="g_re"> Usar expresión regular</label><div id="glist2"></div>`;
+    ["g_q","g_ext"].forEach(i=>$(i).oninput=fillGrep);$("g_re").onchange=fillGrep;fillGrep();
+  }else{
+    const exts=[...new Set(sfiles.map(f=>f.ext||"(sin ext)"))].sort();
+    B.innerHTML=`<div class="bar"><input id="fl_q" placeholder="Filtrar por ruta"><select id="fl_ext" style="width:auto"><option value="all">Todas las extensiones</option>${exts.map(e=>`<option>${esc(e)}</option>`).join("")}</select></div><div id="flist"></div>`;
+    $("fl_q").oninput=fillFiles;$("fl_ext").onchange=fillFiles;fillFiles();
+  }
+}
+function fillVuln(){
+  const sv=$("f_sev").value,rl=$("f_rule").value,q=$("f_q").value.toLowerCase();
+  const rows=sres.filter(x=>(sv==="all"||x.sev===sv)&&(rl==="all"||x.id===rl)&&(!q||(x.file+x.name+x.snippet).toLowerCase().includes(q)));
+  $("slist").innerHTML=rows.length?rows.slice(0,300).map(x=>`<div class="card post"><div><span class="tag ${x.sev==="high"?"bad":x.sev==="med"?"warn":""}">${SEV_N[x.sev]}</span> <b>${esc(x.name)}</b></div><div class="l">${esc(x.file)}${x.line?":"+x.line:""}</div>${x.snippet?`<code class="snip">${esc(x.snippet)}</code>`:""}<details><summary class="l" style="cursor:pointer">Cómo arreglarlo</summary><p class="note">${esc(x.fix)}</p></details></div>`).join("")+(rows.length>300?`<div class="empty">Mostrando 300 de ${rows.length}. Afina los filtros o descarga el reporte.</div>`:""):'<div class="empty">Sin resultados con esos filtros.</div>';
+}
+function fillGrep(){
+  const q=$("g_q").value,ex=$("g_ext").value.trim().toLowerCase().replace(/^\./,""),L=$("glist2");
+  if(!q){L.innerHTML='<div class="empty">Escribe qué buscar.</div>';return}
+  let re;
+  try{re=$("g_re").checked?new RegExp(q,"i"):null}catch(e){L.innerHTML='<div class="empty">La expresión regular no es válida.</div>';return}
+  const ql=q.toLowerCase(),hits=[];let total=0;
+  for(const f of sfiles){
+    if(!f.text||(ex&&f.ext!==ex))continue;
+    const ls=f.text.split("\n");
+    for(let i=0;i<ls.length;i++){
+      if(ls[i].length>2000)continue;
+      if(re?re.test(ls[i]):ls[i].toLowerCase().includes(ql)){total++;if(hits.length<300)hits.push([f.path,i+1,ls[i].trim().slice(0,200)])}
+    }
+  }
+  L.innerHTML=hits.length?`<p class="note">${total} coincidencias${total>300?" (mostrando 300)":""}</p>`+hits.map(h=>`<div class="card post"><div class="l">${esc(h[0])}:${h[1]}</div><code class="snip">${esc(maskLine(h[2]))}</code></div>`).join(""):'<div class="empty">Sin coincidencias.</div>';
+}
+function fillFiles(){
+  const q=$("fl_q").value.toLowerCase(),ex=$("fl_ext").value;
+  const rows=sfiles.filter(f=>(!q||f.path.toLowerCase().includes(q))&&(ex==="all"||(f.ext||"(sin ext)")===ex));
+  $("flist").innerHTML=`<p class="note">${rows.length} archivos</p>`+rows.slice(0,500).map(f=>`<div class="arow"><div style="word-break:break-all">${esc(f.path)}</div><div class="l">${f.size!=null?fmtSize(f.size):""} · ${f.text?"leído":"solo nombre"}</div></div>`).join("");
+}
+function reportTxt(){
+  const c=s=>sres.filter(x=>x.sev===s).length;
+  let t=`Reporte GDPS MANAGER · ${new Date().toLocaleString()}\nArchivos: ${sfiles.length} · Hallazgos: ${sres.length} (Alta ${c("high")}, Media ${c("med")}, Baja ${c("low")})\nAnálisis por patrones: revisa cada hallazgo a mano.\n\n`;
+  for(const x of sres)t+=`[${SEV_N[x.sev].toUpperCase()}] ${x.name}\n  ${x.file}${x.line?":"+x.line:""}\n${x.snippet?"  "+x.snippet+"\n":""}  Solución: ${x.fix}\n\n`;
+  return t;
+}
+function reportCsv(){
+  const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  return ["severidad,tipo,archivo,linea,fragmento,solucion",...sres.map(x=>[SEV_N[x.sev],x.name,x.file,x.line,x.snippet,x.fix].map(q).join(","))].join("\n");
+}
+
 const RULES=String.raw`rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+    function canPosts() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.posts == true);
+    }
+    function canApks() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.apks == true);
+    }
+    function canGdps() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.gdps == true);
+    }
+    function canAdmins() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.admins == true);
+    }
+    function noSetup() {
+      return !exists(/databases/$(database)/documents/config/setup);
+    }
+    function notBanned() {
+      return request.auth != null && !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create: if request.auth != null && ((request.auth.uid == uid && noSetup() && request.resource.data.role == 'owner') || (canAdmins() && request.resource.data.role == 'admin'));
+      allow update: if canAdmins() && resource.data.role != 'owner' && request.resource.data.role == 'admin';
+      allow delete: if canAdmins() && resource.data.role != 'owner' && uid != request.auth.uid;
+    }
+
+    match /config/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && id == 'setup' && noSetup() && getAfter(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    match /profiles/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /bans/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create, delete: if canPosts();
+    }
+
     match /gdps/{g} {
       function isOwner() {
-        return request.auth != null &&
-          get(/databases/$(database)/documents/gdps/$(g)).data.ownerUid == request.auth.uid;
+        return request.auth != null && get(/databases/$(database)/documents/gdps/$(g)).data.ownerUid == request.auth.uid;
       }
       function isPublished() {
         return get(/databases/$(database)/documents/gdps/$(g)).data.get('published', false) == true;
       }
-      allow read: if resource.data.get('published', false) == true
-        || (request.auth != null && resource.data.ownerUid == request.auth.uid);
-      allow create: if request.auth != null
-        && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if isOwner()
-        && request.resource.data.ownerUid == resource.data.ownerUid;
-      allow delete: if isOwner();
+      allow read: if resource.data.get('published', false) == true || (request.auth != null && resource.data.ownerUid == request.auth.uid) || canGdps();
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if (isOwner() && request.resource.data.ownerUid == resource.data.ownerUid) || (canGdps() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['published']) && request.resource.data.published == false);
+      allow delete: if isOwner() || canGdps();
+
       match /announcements/{id} {
         allow read: if isPublished() || isOwner();
         allow write: if isOwner();
@@ -547,30 +914,24 @@ service cloud.firestore {
         allow read, write: if isOwner();
       }
     }
+
     match /global_posts/{id} {
       allow read: if true;
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 1000;
-      allow update: if request.auth != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']);
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000;
+      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']);
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canPosts());
     }
+
     match /global_chat/{id} {
       allow read: if true;
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 500;
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500;
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canPosts());
     }
+
     match /apks/{id} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canApks());
     }
   }
 }`;
