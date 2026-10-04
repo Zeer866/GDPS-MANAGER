@@ -56,6 +56,13 @@ dialog h2{margin:0 0 .5rem;font-size:1.1rem}
 .msg{margin-top:.8rem;color:var(--bad);min-height:1.2em;font-size:.95rem;word-break:break-word}
 pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;overflow:auto;font-size:.8rem;line-height:1.5}
 .toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--cyan);padding:.6rem 1rem;border-radius:10px;z-index:9;max-width:90vw}
+.pre{white-space:pre-wrap;word-break:break-word}
+.post{margin-bottom:.8rem}
+.chatbox{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;padding:.2rem}
+.cm{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.5rem .8rem;max-width:90%;align-self:flex-start}
+.cm.me{align-self:flex-end;border-color:var(--pink)}
+progress{accent-color:var(--pink)}
+h3{margin:1.5rem 0 .5rem}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -81,10 +88,23 @@ pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padd
   </form>
 </dialog>
 
+<dialog id="apkDlg">
+  <h2>Subir APK</h2>
+  <label for="a_name">Nombre</label><input id="a_name" maxlength="60">
+  <label for="a_ver">Versión (opcional)</label><input id="a_ver" maxlength="20">
+  <label for="a_desc">Descripción (opcional)</label><textarea id="a_desc" rows="2" maxlength="300"></textarea>
+  <label for="a_file">Archivo APK de tu celular</label><input id="a_file" type="file" accept=".apk,application/vnd.android.package-archive">
+  <progress id="a_prog" value="0" max="100" style="width:100%;margin-top:.6rem"></progress><div class="l" id="a_pt"></div>
+  <label for="a_link">…o pega un link de descarga</label><input id="a_link" placeholder="https://...">
+  <div class="row"><button class="pri" id="apkOk">Guardar</button><button id="apkNo">Cancelar</button></div>
+  <div class="msg" id="a_msg"></div>
+</dialog>
+
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where,orderBy,limit,arrayUnion,arrayRemove} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getStorage,ref as sref,uploadBytesResumable,getDownloadURL,deleteObject} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const app=initializeApp({
   apiKey:"AIzaSyDtTHh-lEkgbvYpkM_YApre2qHzTlyTeIM",
@@ -94,7 +114,7 @@ const app=initializeApp({
   messagingSenderId:"37211496586",
   appId:"1:37211496586:web:f4839f0b97b5db321d8d73"
 });
-const auth=getAuth(app), db=getFirestore(app);
+const auth=getAuth(app), db=getFirestore(app), storage=getStorage(app);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const url=u=>/^https?:\/\//i.test(u||"")?esc(u):"";
@@ -162,7 +182,7 @@ function read(fields,pre){
 
 /* ---------- Render ---------- */
 function setNav(){
-  const t=[["dir","GDPS Store"]];if(user)t.push(["mine","Mis GDPS"]);t.push(["rules","Reglas Firestore"]);
+  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"]];if(user)t.push(["mine","Mis GDPS"]);t.push(["rules","Reglas"]);
   $("nav").innerHTML=t.map(([k,l])=>`<button data-v="${k}" class="${(view===k||(view==="gdps"&&k==="mine"))?"on":""}">${l}</button>`).join("");
   $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.v));
   $("who").innerHTML=user?`<span>${esc(user.email)}</span><button class="sm" id="out">Salir</button>`:`<button class="pri sm" id="inb">Entrar</button>`;
@@ -180,9 +200,13 @@ function gcard(g,mine){
 }
 function render(){
   setNav();const v=$("view");
+  if(view==="global"){renderGlobal();return}
+  if(view==="apk"){renderApk();return}
   if(view==="rules"){
-    v.innerHTML=`<p class="note">Copia estas reglas en Firebase → Firestore Database → Reglas → Publicar. Reemplazan a las anteriores.</p><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp">Copiar reglas</button></div><pre>${esc(RULES)}</pre>`;
-    $("cp").onclick=()=>navigator.clipboard.writeText(RULES).then(()=>toast("Reglas copiadas"));return;
+    v.innerHTML=`<p class="note">Copia cada bloque donde corresponde y toca Publicar.</p>
+    <h3>1. Firebase → Firestore → Reglas</h3><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp">Copiar reglas de Firestore</button></div><pre>${esc(RULES)}</pre>
+    <h3>2. Firebase → Storage → Reglas (solo si subes APKs con Storage)</h3><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp2">Copiar reglas de Storage</button></div><pre>${esc(SRULES)}</pre>`;
+    $("cp").onclick=()=>copy(RULES,"Reglas copiadas");$("cp2").onclick=()=>copy(SRULES,"Reglas copiadas");return;
   }
   if(view==="dir"){
     const rows=store.filter(g=>!q||(g.name+g.owner+g.desc).toLowerCase().includes(q.toLowerCase()));
@@ -250,6 +274,100 @@ function subscribe(){
   subUnsub=onSnapshot(collection(db,"gdps",cur,sub),s=>{subData=s.docs.map(d=>({id:d.id,...d.data()}));if(view==="gdps"&&sub!=="ficha")table()},e=>toast(errTxt(e)));
 }
 
+/* ---------- Global y APKs ---------- */
+let gsub="posts",posts=[],chat=[],apks=[];
+const aname=()=>user?(user.email||"usuario").split("@")[0]:"";
+const when=t=>t?.toDate?t.toDate().toLocaleString():"";
+const fmtSize=b=>!b?"":b>1048576?(b/1048576).toFixed(1)+" MB":Math.round(b/1024)+" KB";
+function copy(t,m){(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast(m||"Link copiado")).catch(()=>prompt("Copia el texto:",t))}
+onSnapshot(query(collection(db,"global_posts"),orderBy("createdAt","desc"),limit(50)),s=>{posts=mapDocs(s);if(view==="global")renderGlobal()},e=>toast(errTxt(e)));
+onSnapshot(query(collection(db,"global_chat"),orderBy("createdAt","desc"),limit(100)),s=>{chat=mapDocs(s);if(view==="global")renderGlobal()},e=>toast(errTxt(e)));
+onSnapshot(query(collection(db,"apks"),orderBy("createdAt","desc"),limit(100)),s=>{apks=mapDocs(s);if(view==="apk")renderApk()},e=>toast(errTxt(e)));
+
+function renderGlobal(){
+  const v=$("view");
+  if(!$("gshell")){
+    v.innerHTML='<div id="gshell"><div class="sub"><button data-g="posts">Publicaciones</button><button data-g="chat">Chat</button></div><div id="gform"></div><div id="glist"></div></div>';
+    v.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{gsub=b.dataset.g;renderGlobal()});
+  }
+  v.querySelectorAll("[data-g]").forEach(b=>b.classList.toggle("on",b.dataset.g===gsub));
+  const key=gsub+(user?user.uid:"-"),f=$("gform");
+  if(f.dataset.k!==key){
+    f.dataset.k=key;
+    if(!user)f.innerHTML='<div class="bar"><span class="note">Entra para participar.</span><button class="pri" id="gin">Entrar</button></div>';
+    else if(gsub==="posts")f.innerHTML='<div class="card" style="margin-bottom:1rem"><textarea id="gp" rows="3" maxlength="1000" placeholder="¿Qué quieres compartir?"></textarea><div class="row" style="margin:0"><button class="pri" id="gsend">Publicar</button></div></div>';
+    else f.innerHTML='<div class="bar"><input id="gc" maxlength="500" placeholder="Escribe un mensaje"><button class="pri" id="gsend">Enviar</button></div>';
+    if(!user)$("gin").onclick=openAuth;
+    else{
+      const send=async()=>{
+        const el=$(gsub==="posts"?"gp":"gc"),text=el.value.trim();if(!text)return;
+        try{await addDoc(collection(db,gsub==="posts"?"global_posts":"global_chat"),{uid:user.uid,author:aname(),text,...(gsub==="posts"?{likes:[]}:{}),createdAt:serverTimestamp()});el.value=""}
+        catch(e){toast(errTxt(e))}
+      };
+      $("gsend").onclick=send;
+      if(gsub==="chat")$("gc").onkeydown=e=>{if(e.key==="Enter")send()};
+    }
+  }
+  const L=$("glist");
+  if(gsub==="posts"){
+    L.className="";
+    L.innerHTML=posts.length?posts.map(p=>{
+      const n=(p.likes||[]).length,liked=user&&(p.likes||[]).includes(user.uid);
+      return `<div class="card post"><div class="l"><b>${esc(p.author)}</b> · ${esc(when(p.createdAt))}</div><p class="pre">${esc(p.text)}</p><div class="row" style="margin:0"><button class="sm" data-l="${p.id}">${liked?"💜":"🤍"} ${n}</button>${user&&p.uid===user.uid?`<button class="sm dng" data-d="${p.id}">Eliminar</button>`:""}</div></div>`}).join(""):'<div class="empty">Aún no hay publicaciones. Sé el primero.</div>';
+    L.querySelectorAll("[data-l]").forEach(b=>b.onclick=async()=>{
+      if(!user){openAuth();return}
+      const p=posts.find(x=>x.id===b.dataset.l);
+      try{await updateDoc(doc(db,"global_posts",p.id),{likes:(p.likes||[]).includes(user.uid)?arrayRemove(user.uid):arrayUnion(user.uid)})}catch(e){toast(errTxt(e))}
+    });
+    L.querySelectorAll("[data-d]").forEach(b=>b.onclick=async()=>{if(!confirm("¿Eliminar tu publicación?"))return;try{await deleteDoc(doc(db,"global_posts",b.dataset.d))}catch(e){toast(errTxt(e))}});
+  }else{
+    L.className="chatbox";
+    L.innerHTML=chat.length?[...chat].reverse().map(m=>`<div class="cm${user&&m.uid===user.uid?" me":""}"><div class="l"><b>${esc(m.author)}</b> · ${esc(when(m.createdAt))}${user&&m.uid===user.uid?` <a href="#" data-d="${m.id}">borrar</a>`:""}</div><div class="pre">${esc(m.text)}</div></div>`).join(""):'<div class="empty">Nadie ha escrito todavía. Di hola 👋</div>';
+    L.querySelectorAll("[data-d]").forEach(a=>a.onclick=async e=>{e.preventDefault();try{await deleteDoc(doc(db,"global_chat",a.dataset.d))}catch(er){toast(errTxt(er))}});
+    L.scrollTop=L.scrollHeight;
+  }
+}
+
+function renderApk(){
+  const v=$("view");
+  const rows=apks.filter(a=>!q||(a.name+a.author+a.desc).toLowerCase().includes(q.toLowerCase()));
+  v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar APK" value="${esc(q)}">${user?'<button class="pri" id="up">Subir APK</button>':'<button class="pri" id="inb3">Entrar para subir un APK</button>'}</div>
+  ${rows.length?`<div class="grid">${rows.map(a=>`<div class="card"><h3>${esc(a.name)}</h3><div class="l">${a.version?esc("v"+a.version)+" · ":""}por ${esc(a.author)}${a.size?" · "+fmtSize(a.size):""}</div>${a.desc?`<p>${esc(a.desc)}</p>`:""}<div class="links"><a href="${url(a.url)}" target="_blank" rel="noopener">Descargar</a><button class="sm" data-c="${a.id}">Copiar link</button>${user&&a.uid===user.uid?`<button class="sm dng" data-x="${a.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Todavía no hay APKs. Sube el primero.</div>'}`;
+  keepSearch(renderApk);
+  if(user)$("up").onclick=openApk;else $("inb3").onclick=openAuth;
+  v.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>copy(apks.find(x=>x.id===b.dataset.c).url));
+  v.querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{
+    const a=apks.find(x=>x.id===b.dataset.x);if(!confirm("¿Eliminar este APK?"))return;
+    try{await deleteDoc(doc(db,"apks",a.id));if(a.path)deleteObject(sref(storage,a.path)).catch(()=>{})}catch(e){toast(errTxt(e))}
+  });
+}
+const am2=m=>$("a_msg").textContent=m;
+function openApk(){
+  ["a_name","a_ver","a_desc","a_link","a_file"].forEach(i=>$(i).value="");
+  $("a_prog").value=0;$("a_pt").textContent="";am2("");$("apkOk").disabled=false;$("apkDlg").showModal();
+}
+$("apkNo").onclick=()=>$("apkDlg").close();
+$("apkOk").onclick=async()=>{
+  const name=$("a_name").value.trim(),version=$("a_ver").value.trim(),desc=$("a_desc").value.trim(),file=$("a_file").files[0],link=$("a_link").value.trim();
+  if(!name){am2("Escribe el nombre del APK.");return}
+  if(link&&!/^https?:\/\//i.test(link)){am2("El link debe empezar con https://");return}
+  if(!file&&!link){am2("Elige un archivo o pega un link.");return}
+  let u=link,path="",size=0;
+  $("apkOk").disabled=true;am2("");
+  try{
+    if(file){
+      path=`apks/${user.uid}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,"_")}`;
+      const task=uploadBytesResumable(sref(storage,path),file);
+      await new Promise((res,rej)=>task.on("state_changed",sn=>{const pc=sn.bytesTransferred/sn.totalBytes*100;$("a_prog").value=pc;$("a_pt").textContent=Math.round(pc)+"%"},rej,res));
+      u=await getDownloadURL(task.snapshot.ref);size=file.size;
+    }
+    await addDoc(collection(db,"apks"),{uid:user.uid,author:aname(),name,version,desc,url:u,path,size,createdAt:serverTimestamp()});
+    $("apkDlg").close();toast("APK publicado");
+  }catch(e){
+    am2(String(e.code||"").startsWith("storage/")?"No se pudo subir el archivo. Firebase Storage necesita el plan Blaze y sus reglas publicadas. Mientras tanto, pega un link de descarga.":errTxt(e));
+  }finally{$("apkOk").disabled=false}
+};
+
 const RULES=String.raw`rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -279,6 +397,43 @@ service cloud.firestore {
       match /members/{id} {
         allow read, write: if isOwner();
       }
+    }
+    match /global_posts/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000;
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']);
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    match /global_chat/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 500;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+    match /apks/{id} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+  }
+}`;
+const SRULES=String.raw`rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /apks/{uid}/{file} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 300 * 1024 * 1024;
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
   }
 }`;
