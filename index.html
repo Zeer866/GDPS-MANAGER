@@ -106,10 +106,26 @@ h3{margin:1.5rem 0 .5rem}
   <label for="a_ver">Versión (opcional)</label><input id="a_ver" maxlength="20">
   <label for="a_desc">Descripción (opcional)</label><textarea id="a_desc" rows="2" maxlength="300"></textarea>
   <label for="a_file">Archivo APK de tu celular</label><input id="a_file" type="file" accept=".apk,application/vnd.android.package-archive">
+  <p class="note">Aunque pegues un link, elige también el archivo: se guarda su huella (SHA-256) para que otros comprueben que no fue modificado.</p>
   <progress id="a_prog" value="0" max="100" style="width:100%;margin-top:.6rem"></progress><div class="l" id="a_pt"></div>
   <label for="a_link">…o pega un link de descarga</label><input id="a_link" placeholder="https://...">
   <div class="row"><button class="pri" id="apkOk">Guardar</button><button id="apkNo">Cancelar</button></div>
   <div class="msg" id="a_msg"></div>
+</dialog>
+
+<dialog id="patchDlg">
+  <h2>Publicar parche</h2>
+  <label for="pt_name">Nombre</label><input id="pt_name" maxlength="60">
+  <label for="pt_desc">Descripción (qué hace)</label><textarea id="pt_desc" rows="2" maxlength="300"></textarea>
+  <label for="pt_ext">Para archivos</label>
+  <select id="pt_ext"><option value="php">.php</option><option value="js">.js</option><option value="htaccess">.htaccess</option><option value="json">.json</option><option value="html">.html</option><option value="txt">.txt</option><option value="any">cualquiera</option></select>
+  <label>Pasos del parche</label>
+  <div id="pt_list" class="note pre" style="margin:.2rem 0 .6rem"></div>
+  <p class="note">Los pasos salen de lo que hiciste con los botones del Script. Evita borrar o comentar por número de línea: cambia entre versiones.</p>
+  <details><summary class="l" style="cursor:pointer">Editar pasos a mano (avanzado)</summary>
+    <textarea id="pt_steps" rows="6" style="font-family:ui-monospace,Menlo,Consolas,monospace"></textarea></details>
+  <div class="row"><button class="pri" id="ptOk">Publicar</button><button id="ptNo">Cancelar</button></div>
+  <div class="msg" id="pt_msg"></div>
 </dialog>
 
 <dialog id="permDlg">
@@ -177,24 +193,24 @@ $("btnIn").onclick=()=>signInWithEmailAndPassword(auth,$("em").value.trim(),$("p
 $("btnUp").onclick=()=>createUserWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value).catch(e=>am(errTxt(e)));
 
 /* ---------- Formulario genérico ---------- */
-function form(title,fields,vals,onSave){
-  $("dlgT").textContent=title;
+function form(title,fields,vals,onSave,msg,btn){
+  $("dlgT").textContent=title;$("frm").querySelector("button.pri").textContent=btn||"Guardar";
   $("dlgF").innerHTML=fields.map(f=>{
     const val=vals?vals[f.k]:(f.d??"");const id="f_"+f.k;
     const inp=f.t==="select"?`<select id="${id}">${f.o.map(o=>`<option ${o==val?"selected":""}>${esc(o)}</option>`).join("")}</select>`
-      :f.t==="textarea"?`<textarea id="${id}" rows="3">${esc(val)}</textarea>`
-      :`<input id="${id}" type="${f.t||"text"}" value="${esc(val)}">`;
+      :f.t==="textarea"?`<textarea id="${id}" rows="3" placeholder="${esc(f.ph||"")}">${esc(val)}</textarea>`
+      :`<input id="${id}" type="${f.t||"text"}" value="${esc(val)}" placeholder="${esc(f.ph||"")}">`;
     return `<label for="${id}">${esc(f.l)}</label>${inp}`}).join("");
   const d=$("dlg");d.showModal();$("dlgNo").onclick=()=>d.close();
   $("frm").onsubmit=async e=>{
     e.preventDefault();const o=read(fields,"f_");if(!o)return;
-    try{await onSave(o);d.close();toast("Guardado")}catch(er){toast(errTxt(er))}
+    try{await onSave(o);d.close();if(msg!=="")toast(msg||"Guardado")}catch(er){toast(errTxt(er))}
   };
 }
 function read(fields,pre){
   const o={};
   for(const f of fields){
-    let x=$(pre+f.k).value.trim();if(f.t==="number")x=Number(x)||0;
+    let x=$(pre+f.k).value;if(!f.raw)x=x.trim();if(f.t==="number")x=Number(x)||0;
     if(x===""&&!f.opt){toast("Completa “"+f.l+"”");return null}
     if(f.u&&x&&!/^https?:\/\//i.test(x)){toast("“"+f.l+"” debe empezar con https://");return null}
     o[f.k]=x}
@@ -203,7 +219,7 @@ function read(fields,pre){
 
 /* ---------- Render ---------- */
 function setNav(){
-  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"],["scan","Escáner"],["script","Script"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);if(myAdmin||(user&&!setupExists))t.push(["admin","Admin"]);t.push(["rules","Reglas"]);
+  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"],["scan","Escáner"],["script","Script"],["patches","Parches"],["launch","Asistente"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);if(myAdmin||(user&&!setupExists))t.push(["admin","Admin"]);t.push(["rules","Reglas"]);
   $("nav").innerHTML=t.map(([k,l])=>`<button data-v="${k}" class="${(view===k||(view==="gdps"&&k==="mine"))?"on":""}">${l}</button>`).join("");
   $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.v));
   $("who").innerHTML=user?`<span>${esc(user.email)}</span><button class="sm" id="out">Salir</button>`:`<button class="pri sm" id="inb">Entrar</button>`;
@@ -215,7 +231,7 @@ function keepSearch(fn){const i=$("q");if(!i)return;i.oninput=()=>{q=i.value;fn(
 function gcard(g,mine){
   const links=[["Discord",g.discord],["Android",g.apk],["PC",g.pc],["Dashboard",g.dash]].filter(x=>url(x[1]))
     .map(([l,u])=>`<a href="${url(u)}" target="_blank" rel="noopener">${l}</a>`).join("");
-  return `<div class="card"><h3>${esc(g.name)}</h3>${mine?`<div><span class="tag ${g.published?"ok":""}">${g.published?"Publicado en la Store":"Borrador"}</span></div>`:""}<div class="l">por ${esc(g.owner)}</div>${g.desc?`<p>${esc(g.desc)}</p>`:""}
+  return `<div class="card"><h3>${esc(g.name)}</h3>${mine?`<div><span class="tag ${g.published?"ok":""}">${g.published?"Publicado en la Store":"Borrador"}</span></div>`:""}<div class="l">por ${esc(g.owner)}</div>${badges(g)}${g.desc?`<p>${esc(g.desc)}</p>`:""}
     <div class="links">${links||'<span class="l">Sin links todavía</span>'}</div>
     ${mine?`<button class="pri sm" data-m="${g.id}">Gestionar</button>`:""}</div>`;
 }
@@ -226,6 +242,8 @@ function render(){
   if(view==="terminal"){renderTerminal();return}
   if(view==="scan"){renderScan();return}
   if(view==="script"){renderPatch();return}
+  if(view==="patches"){renderPatches();return}
+  if(view==="launch"){renderLaunch();return}
   if(view==="admin"){renderAdmin();return}
   if(view==="rules"){
     v.innerHTML=`<p class="note">Copia cada bloque donde corresponde y toca Publicar.</p>
@@ -235,7 +253,7 @@ function render(){
   }
   if(view==="dir"){
     const rows=store.filter(g=>!q||(g.name+g.owner+g.desc).toLowerCase().includes(q.toLowerCase()));
-    v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar en la GDPS Store" value="${esc(q)}">${user?"":'<button class="pri" id="inb2">Entrar para publicar el tuyo</button>'}</div>
+    v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar en la GDPS Store" value="${esc(q)}">${user?"":'<button class="pri" id="inb2">Entrar para publicar el tuyo</button>'}</div><p class="note" style="margin-top:0">Los sellos 🛡 y 🚀 los publica cada dueño: son autoanálisis, no auditorías.</p>
     ${rows.length?`<div class="grid">${rows.map(g=>gcard(g,false)).join("")}</div>`:`<div class="empty">La GDPS Store está vacía. Entra, registra tu GDPS y publícalo.</div>`}`;
     keepSearch(render);if($("inb2"))$("inb2").onclick=openAuth;return;
   }
@@ -357,11 +375,15 @@ function renderGlobal(){
 function renderApk(){
   const v=$("view");
   const rows=apks.filter(a=>!q||(a.name+a.author+a.desc).toLowerCase().includes(q.toLowerCase()));
-  v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar APK" value="${esc(q)}">${user?'<button class="pri" id="up">Subir APK</button>':'<button class="pri" id="inb3">Entrar para subir un APK</button>'}</div>
-  ${rows.length?`<div class="grid">${rows.map(a=>`<div class="card"><h3>${esc(a.name)}</h3><div class="l">${a.version?esc("v"+a.version)+" · ":""}por ${esc(a.author)}${a.size?" · "+fmtSize(a.size):""}</div>${a.desc?`<p>${esc(a.desc)}</p>`:""}<div class="links"><a href="${url(a.url)}" target="_blank" rel="noopener">Descargar</a><button class="sm" data-c="${a.id}">Copiar link</button>${user&&(a.uid===user.uid||can("apks"))?`<button class="sm dng" data-x="${a.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Todavía no hay APKs. Sube el primero.</div>'}`;
+  v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar APK" value="${esc(q)}">${user?'<button class="pri" id="up">Subir APK</button>':'<button class="pri" id="inb3">Entrar para subir un APK</button>'}<button id="vfy">🔍 Verificar un APK</button></div>${vfRes?`<div class="card" style="margin-bottom:1rem">${vfRes}</div>`:""}
+  ${rows.length?`<div class="grid">${rows.map(a=>`<div class="card"><h3>${esc(a.name)}</h3><div class="l">${a.version?esc("v"+a.version)+" · ":""}por ${esc(a.author)}${a.size?" · "+fmtSize(a.size):""}</div>${a.desc?`<p>${esc(a.desc)}</p>`:""}${a.sha256?`<div class="l" style="word-break:break-all">SHA-256: ${esc(a.sha256.slice(0,16))}…${esc(a.sha256.slice(-8))}</div>`:'<div class="l">Sin huella registrada</div>'}<div class="links"><a href="${url(a.url)}" target="_blank" rel="noopener">Descargar</a><button class="sm" data-c="${a.id}">Copiar link</button>${a.sha256?`<button class="sm" data-v="${a.id}">Verificar mi archivo</button><button class="sm" data-h="${a.id}">Copiar huella</button>`:""}${user&&(a.uid===user.uid||can("apks"))?`<button class="sm dng" data-x="${a.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Todavía no hay APKs. Sube el primero.</div>'}`;
   keepSearch(renderApk);
   if(user)$("up").onclick=openApk;else $("inb3").onclick=openAuth;
   v.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>copy(apks.find(x=>x.id===b.dataset.c).url));
+  $("vfy").onclick=()=>apkVerify();
+  v.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>apkVerify(b.dataset.v));
+  v.querySelectorAll("[data-h]").forEach(b=>b.onclick=()=>copy(apks.find(x=>x.id===b.dataset.h).sha256,"Huella copiada"));
+  if($("vf_x"))$("vf_x").onclick=()=>{vfRes=null;renderApk()};
   v.querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{
     const a=apks.find(x=>x.id===b.dataset.x);if(!confirm("¿Eliminar este APK?"))return;
     try{await deleteDoc(doc(db,"apks",a.id));if(a.path)deleteObject(sref(storage,a.path)).catch(()=>{})}catch(e){toast(errTxt(e))}
@@ -382,13 +404,15 @@ $("apkOk").onclick=async()=>{
   let u=link,path="",size=0;
   $("apkOk").disabled=true;am2("");
   try{
-    if(file){
+    if(file&&!link){
       path=`apks/${user.uid}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,"_")}`;
       const task=uploadBytesResumable(sref(storage,path),file);
       await new Promise((res,rej)=>task.on("state_changed",sn=>{const pc=sn.bytesTransferred/sn.totalBytes*100;$("a_prog").value=pc;$("a_pt").textContent=Math.round(pc)+"%"},rej,res));
       u=await getDownloadURL(task.snapshot.ref);size=file.size;
     }
-    await addDoc(collection(db,"apks"),{uid:user.uid,author:aname(),name,version,desc,url:u,path,size,createdAt:serverTimestamp()});
+    let sha256="";
+    if(file){am2("Calculando huella (SHA-256)…");sha256=await sha256File(file,pc=>{$("a_pt").textContent="Huella "+Math.round(pc*100)+"%"});size=file.size}
+    await addDoc(collection(db,"apks"),{uid:user.uid,author:aname(),name,version,desc,url:u,path,size,sha256,createdAt:serverTimestamp()});
     $("apkDlg").close();toast("APK publicado");
   }catch(e){
     am2(String(e.code||"").startsWith("storage/")?"No se pudo subir el archivo. Firebase Storage necesita el plan Blaze y sus reglas publicadas. Mientras tanto, pega un link de descarga.":errTxt(e));
@@ -601,6 +625,7 @@ function renderAdmin(){
     if(can("posts")){
       h+=sec("Publicaciones",posts.slice(0,20).map(x=>row(`<b>${esc(x.author)}</b>`,esc((x.text||"").slice(0,90)),`<button class="sm dng" data-k="delp" data-id="${x.id}">Eliminar</button>`)));
       h+=sec("Chat",chat.slice(0,20).map(x=>row(`<b>${esc(x.author)}</b>`,esc((x.text||"").slice(0,90)),`<button class="sm dng" data-k="delc" data-id="${x.id}">Eliminar</button>`)));
+      h+=sec("Parches",patches.slice(0,20).map(x=>row(`<b>${esc(x.name)}</b>`,"por "+esc(x.author),`<button class="sm dng" data-k="delpt" data-id="${x.id}">Eliminar</button>`)));
       h+=sec("Baneados",adm.bans.map(b=>row(`<b>${esc(b.name||b.id)}</b>`,"No puede publicar ni subir APKs",`<button class="sm" data-k="unban" data-id="${b.id}">Quitar ban</button>`)));
     }
     if(can("apks"))h+=sec("APKs",apks.slice(0,20).map(x=>row(`<b>${esc(x.name)}</b>`,"por "+esc(x.author),`<button class="sm dng" data-k="dela" data-id="${x.id}">Eliminar</button>`)));
@@ -614,6 +639,7 @@ function renderAdmin(){
       else if(k==="delg"){if(confirm("¿Eliminar este GDPS?"))await deleteDoc(doc(db,"gdps",id))}
       else if(k==="delp"){if(confirm("¿Eliminar esta publicación?"))await deleteDoc(doc(db,"global_posts",id))}
       else if(k==="delc")await deleteDoc(doc(db,"global_chat",id));
+      else if(k==="delpt"){if(confirm("¿Eliminar este parche?"))await deleteDoc(doc(db,"patches",id))}
       else if(k==="dela"){const a=apks.find(x=>x.id===id);if(confirm("¿Eliminar este APK?")){await deleteDoc(doc(db,"apks",id));if(a&&a.path)deleteObject(sref(storage,a.path)).catch(()=>{})}}
       else if(k==="ban"){const p=adm.profiles.find(x=>x.id===id);await setDoc(doc(db,"bans",id),{by:user.uid,name:p?p.name:"",createdAt:serverTimestamp()});toast("Baneado de Global y APKs")}
       else if(k==="unban")await deleteDoc(doc(db,"bans",id));
@@ -730,10 +756,162 @@ function scanAll(files){
   return out;
 }
 /*SCAN_END*/
+/*FIX_START*/
+const HT_BLOCK='Options -Indexes\n<FilesMatch "\\.(env|sql|bak|old|log)$">\n  Require all denied\n</FilesMatch>';
+const HT_NOTE='# htaccess-sugerido.txt\n# Si ya tienes un .htaccess en tu servidor, NO lo reemplaces con este archivo:\n# copia estas líneas al final del que ya tienes.\n\n'+HT_BLOCK+'\n';
+function autoFix(f){
+  const fixes=[];
+  if(!f.text)return{text:f.text,fixes};
+  if(f.ext==="htaccess"){
+    if(f.text.includes("-Indexes"))return{text:f.text,fixes};
+    fixes.push({id:"htaccess",line:0,desc:"Se añadió protección: sin listado de carpetas y acceso bloqueado a .env, .sql, .bak, .old y .log"});
+    return{text:f.text.replace(/\s+$/,"")+"\n\n"+HT_BLOCK+"\n",fixes};
+  }
+  if(!PHP_EXT.has(f.ext))return{text:f.text,fixes};
+  const L=f.text.split("\n");
+  for(let i=0;i<L.length;i++){
+    const l=L[i],tl=l.trim();
+    if(!tl||/^(\/\/|#|\*|\/\*)/.test(tl))continue;
+    let n=l;
+    if(/ini_set\s*\(\s*["']display_errors["']\s*,\s*["']?(1|on|true)["']?\s*\)/i.test(n)){
+      n=n.replace(/(ini_set\s*\(\s*["']display_errors["']\s*,\s*)["']?(?:1|on|true)["']?(\s*\))/i,(m,a,b)=>a+"'0'"+b);
+      fixes.push({id:"disp",line:i+1,desc:"display_errors desactivado"});
+    }else if(/^\s*phpinfo\s*\(\s*\)\s*;?\s*$/i.test(n)){
+      n=n.replace(/^(\s*)/,(m,a)=>a+"// ");
+      fixes.push({id:"phpinfo",line:i+1,desc:"phpinfo() comentado"});
+    }
+    if(/CURLOPT_SSL_VERIFYPEER\s*,\s*(false|0)\b/i.test(n)){
+      n=n.replace(/(CURLOPT_SSL_VERIFYPEER\s*,\s*)(?:false|0)\b/i,(m,a)=>a+"true");
+      fixes.push({id:"ssl",line:i+1,desc:"Verificación SSL (peer) activada"});
+    }
+    if(/CURLOPT_SSL_VERIFYHOST\s*,\s*(false|0)\b/i.test(n)){
+      n=n.replace(/(CURLOPT_SSL_VERIFYHOST\s*,\s*)(?:false|0)\b/i,(m,a)=>a+"2");
+      fixes.push({id:"ssl",line:i+1,desc:"Verificación SSL (host) activada"});
+    }
+    if(/\b(rand|mt_rand)\s*\(/i.test(n)&&/(token|pass|key|hash|salt)/i.test(n)){
+      const m2=n.replace(/\b(?:mt_)?rand\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/gi,(x,a,b)=>"random_int("+a+", "+b+")");
+      if(m2!==n){n=m2;fixes.push({id:"rand",line:i+1,desc:"Número aleatorio seguro con random_int() (requiere PHP 7+)"})}
+    }
+    L[i]=n;
+  }
+  return{text:L.join("\n"),fixes};
+}
+/*FIX_END*/
+/*SHA_START*/
+const K256=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+class Sha256{
+  constructor(){this.h=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);this.buf=new Uint8Array(64);this.bl=0;this.len=0;this.w=new Uint32Array(64)}
+  _block(d,o){
+    const w=this.w,h=this.h;
+    for(let i=0;i<16;i++){const j=o+i*4;w[i]=(d[j]<<24)|(d[j+1]<<16)|(d[j+2]<<8)|d[j+3]}
+    for(let i=16;i<64;i++){
+      const x=w[i-15],y=w[i-2];
+      const s0=((x>>>7)|(x<<25))^((x>>>18)|(x<<14))^(x>>>3);
+      const s1=((y>>>17)|(y<<15))^((y>>>19)|(y<<13))^(y>>>10);
+      w[i]=(w[i-16]+s0+w[i-7]+s1)|0;
+    }
+    let a=h[0],b=h[1],c=h[2],dd=h[3],e=h[4],f=h[5],g=h[6],hh=h[7];
+    for(let i=0;i<64;i++){
+      const S1=((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7));
+      const ch=(e&f)^(~e&g);
+      const t1=(hh+S1+ch+K256[i]+w[i])|0;
+      const S0=((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10));
+      const mj=(a&b)^(a&c)^(b&c);
+      const t2=(S0+mj)|0;
+      hh=g;g=f;f=e;e=(dd+t1)|0;dd=c;c=b;b=a;a=(t1+t2)|0;
+    }
+    h[0]=(h[0]+a)|0;h[1]=(h[1]+b)|0;h[2]=(h[2]+c)|0;h[3]=(h[3]+dd)|0;h[4]=(h[4]+e)|0;h[5]=(h[5]+f)|0;h[6]=(h[6]+g)|0;h[7]=(h[7]+hh)|0;
+  }
+  update(data){
+    this.len+=data.length;let i=0;
+    if(this.bl){
+      while(i<data.length&&this.bl<64)this.buf[this.bl++]=data[i++];
+      if(this.bl===64){this._block(this.buf,0);this.bl=0}
+    }
+    for(;i+64<=data.length;i+=64)this._block(data,i);
+    while(i<data.length)this.buf[this.bl++]=data[i++];
+  }
+  hex(){
+    const bits=this.len*8,total=this.bl<56?56-this.bl+8:120-this.bl+8;
+    const pad=new Uint8Array(total);pad[0]=0x80;
+    const hi=Math.floor(bits/4294967296),lo=bits>>>0,n=total;
+    pad[n-8]=(hi>>>24)&255;pad[n-7]=(hi>>>16)&255;pad[n-6]=(hi>>>8)&255;pad[n-5]=hi&255;
+    pad[n-4]=(lo>>>24)&255;pad[n-3]=(lo>>>16)&255;pad[n-2]=(lo>>>8)&255;pad[n-1]=lo&255;
+    this.update(pad);
+    return Array.from(this.h,x=>(x>>>0).toString(16).padStart(8,"0")).join("");
+  }
+}
+async function sha256File(file,onP){
+  const h=new Sha256(),CH=4*1024*1024;
+  for(let o=0;o<file.size;o+=CH){
+    h.update(new Uint8Array(await file.slice(o,o+CH).arrayBuffer()));
+    if(onP)onP(Math.min(1,(o+CH)/file.size));
+    await new Promise(r=>setTimeout(r));
+  }
+  return h.hex();
+}
+function sealCalc(res,nFiles){
+  const c=x=>res.filter(r=>r.sev===x).length,h=c("high"),m=c("med"),l=c("low");
+  const score=Math.max(0,100-Math.min(h,3)*30-Math.min(m,8)*4-Math.min(l,10));
+  const grade=score>=90?"A":score>=75?"B":score>=55?"C":"D";
+  return{score,grade,high:h,med:m,low:l,files:nFiles};
+}
+/*SHA_END*/
 const extOf=n=>{const b=n.split("/").pop();return b.includes(".")?b.split(".").pop().toLowerCase():""};
 let sfiles=[],sres=[],sdone=false,ssub="vuln";
 function loadJSZip(){return window.JSZip?Promise.resolve(window.JSZip):new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=()=>res(window.JSZip);s.onerror=()=>rej(new Error("No se pudo cargar el lector de .zip"));document.head.append(s)})}
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.append(a);a.click();a.remove()}
+let sfix=null;
+function fixRun(){
+  const changed=[];let total=0;
+  for(const f of sfiles){
+    if(!f.text)continue;
+    const r=autoFix(f);
+    if(r.text!==f.text){changed.push({path:f.path,ext:f.ext,orig:f.text,text:r.text,fixes:r.fixes});total+=r.fixes.length}
+  }
+  const extra=[];
+  if(!sfiles.some(f=>f.ext==="htaccess")&&sfiles.some(f=>PHP_EXT.has(f.ext)))extra.push({path:"htaccess-sugerido.txt",text:HT_NOTE});
+  const after=sfiles.map(f=>{const c=changed.find(x=>x.path===f.path);return c?{...f,text:c.text}:f});
+  sfix={changed,extra,remaining:scanAll(after),total};
+  ssub="fix";drawScan();
+}
+function drawFix(){
+  const B=$("sbody");
+  if(!sfix){ssub="vuln";drawScan();return}
+  const hi=sfix.remaining.filter(x=>x.sev==="high").length;
+  B.innerHTML=`<div class="grid" style="margin-bottom:1rem"><div class="card"><div class="n" style="color:var(--ok)">${sfix.total}</div><div class="l">Arreglos hechos en ${sfix.changed.length} archivo(s)</div></div><div class="card"><div class="n" style="color:${hi?"var(--bad)":"#ffd166"}">${sfix.remaining.length}</div><div class="l">Quedan para revisar a mano${hi?" ("+hi+" altos)":""}</div></div></div>
+  <p class="note">Solo se corrige lo simple y seguro. Lo demás (consultas SQL, eval, credenciales…) hay que revisarlo a mano porque un cambio automático podría romper tu GDPS.</p>
+  <div class="row" style="margin:0 0 1rem"><button class="pri" id="fx_zip"${sfix.changed.length||sfix.extra.length?"":" disabled"}>Descargar corregidos (.zip)</button><button id="fx_script"${sfix.changed.length?"":" disabled"}>Revisar cambios en Script</button><button id="fx_back">← Volver a resultados</button></div>
+  ${sfix.changed.length?sfix.changed.slice(0,40).map(c=>`<div class="card post"><b style="word-break:break-all">${esc(c.path)}</b><code class="snip">${esc(c.fixes.map(x=>"• "+(x.line?"línea "+x.line+": ":"")+x.desc).join("\n"))}</code></div>`).join(""):'<div class="empty">No hay nada que se pueda arreglar automáticamente.</div>'}
+  ${sfix.remaining.length?`<h3>Para revisar a mano</h3>`+sfix.remaining.slice(0,30).map(x=>`<div class="arow"><div><span class="tag ${x.sev==="high"?"bad":x.sev==="med"?"warn":""}">${SEV_N[x.sev]}</span> ${esc(x.name)}<div class="l" style="word-break:break-all">${esc(x.file)}${x.line?":"+x.line:""}</div></div></div>`).join("")+(sfix.remaining.length>30?`<p class="note">…y ${sfix.remaining.length-30} más. Están en el reporte del .zip.</p>`:""):""}`;
+  $("fx_back").onclick=()=>{ssub="vuln";drawScan()};
+  $("fx_zip").onclick=fixZip;$("fx_script").onclick=fixToScript;
+}
+function fixReport(){
+  let t="GDPS MANAGER · Arreglos automáticos · "+new Date().toLocaleString()+"\n\nARREGLADO ("+sfix.total+"):\n";
+  for(const c of sfix.changed)for(const x of c.fixes)t+="- "+c.path+(x.line?":"+x.line:"")+" · "+x.desc+"\n";
+  if(!sfix.total)t+="(nada)\n";
+  t+="\nPENDIENTE DE REVISAR A MANO ("+sfix.remaining.length+"):\n";
+  for(const x of sfix.remaining)t+="- ["+SEV_N[x.sev]+"] "+x.name+" · "+x.file+(x.line?":"+x.line:"")+"\n    "+x.fix+"\n";
+  t+="\nAVISOS:\n- Haz una copia de tus archivos antes de subir los corregidos y pruébalos primero.\n- Si se activó la verificación SSL y tu servidor no tiene certificados válidos, esas conexiones pueden fallar.\n- random_int() requiere PHP 7 o superior.\n- Si ya tienes un .htaccess en tu servidor, no lo reemplaces: añade las líneas sugeridas al final.\n";
+  return t;
+}
+async function fixZip(){
+  try{
+    const Z=await loadJSZip(),z=new Z(),clean=x=>x.replace(/^\/+/,"").replace(/(\.\.\/)+/g,"");
+    for(const c of sfix.changed)z.file(clean(c.path),c.text);
+    for(const e of sfix.extra)z.file(e.path,e.text);
+    z.file("REPORTE-ARREGLOS.txt",fixReport());
+    dl("gdps-corregido.zip",await z.generateAsync({type:"blob"}),"application/zip");
+  }catch(e){toast("No se pudo crear el .zip: "+e.message)}
+}
+function fixToScript(){
+  if(!sfix||!sfix.changed.length){toast("No hay archivos modificados.");return}
+  for(const c of sfix.changed)pf.push({name:c.path.split("/").pop(),ext:c.ext,orig:c.orig,text:c.text,hist:[],rec:[]});
+  pcur=pf.length-sfix.changed.length;pwin=[1,80];
+  pPrint("Archivos corregidos cargados desde el Escáner. Toca «Ver cambios» para revisar lo que se modificó.");
+  view="script";q="";render();
+}
 function renderScan(){
   if($("sshell"))return;
   const v=$("view");
@@ -749,7 +927,7 @@ function renderScan(){
 async function scanRun(){
   const picked=[...$("s_files").files],st=$("s_status");
   if(!picked.length){st.textContent="Elige al menos un archivo.";return}
-  $("s_go").disabled=true;sfiles=[];
+  $("s_go").disabled=true;sfiles=[];sfix=null;if(ssub==="fix")ssub="vuln";
   try{
     for(const f of picked){
       if(sfiles.length>=3000)break;
@@ -789,12 +967,13 @@ function drawScan(){
     <div class="bar"><select id="f_sev" style="width:auto"><option value="all">Toda severidad</option><option value="high">Alta</option><option value="med">Media</option><option value="low">Baja</option></select>
     <select id="f_rule" style="width:auto;max-width:100%"><option value="all">Todos los tipos</option>${rules.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join("")}</select>
     <input id="f_q" placeholder="Filtrar por archivo o texto"></div>
-    <div class="row" style="margin:0 0 1rem"><button class="sm" id="r_txt">Descargar reporte .txt</button><button class="sm" id="r_csv">Descargar .csv</button></div><div id="slist"></div>`;
+    <div class="row" style="margin:0 0 1rem"><button class="pri sm" id="r_fix">🔧 Arreglar con un toque</button><button class="sm" id="r_seal">🏅 Publicar sello de seguridad</button><button class="sm" id="r_txt">Descargar reporte .txt</button><button class="sm" id="r_csv">Descargar .csv</button></div><div id="slist"></div>`;
     ["f_sev","f_rule"].forEach(i=>$(i).onchange=fillVuln);$("f_q").oninput=fillVuln;
+    $("r_fix").onclick=fixRun;$("r_seal").onclick=sealRun;
     $("r_txt").onclick=()=>dl("reporte-gdps.txt",reportTxt(),"text/plain");
     $("r_csv").onclick=()=>dl("reporte-gdps.csv",reportCsv(),"text/csv");
     fillVuln();
-  }else if(ssub==="grep"){
+  }else if(ssub==="fix"){drawFix()}else if(ssub==="grep"){
     B.innerHTML=`<div class="bar"><input id="g_q" placeholder="Texto o patrón a buscar en el código"><input id="g_ext" placeholder="extensión (ej: php)" style="max-width:9rem"></div><label class="chk"><input type="checkbox" id="g_re"> Usar expresión regular</label><div id="glist2"></div>`;
     ["g_q","g_ext"].forEach(i=>$(i).oninput=fillGrep);$("g_re").onchange=fillGrep;fillGrep();
   }else{
@@ -970,6 +1149,32 @@ function patchCmd(f,line){
     default:return E("comando desconocido: "+(c||"(vacío)")+". Escribe ayuda.");
   }
 }
+const PATCH_OK=new Set(["reemplazar","insertar","borrar","comentar","descomentar","receta"]);
+function validSteps(txt){
+  const steps=String(txt||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if(!steps.length)return{err:"Escribe al menos un paso."};
+  if(steps.length>30)return{err:"Máximo 30 pasos."};
+  for(let i=0;i<steps.length;i++){
+    const c=steps[i].split(/\s+/)[0].toLowerCase();
+    if(!PATCH_OK.has(c))return{err:"Paso "+(i+1)+": «"+c+"» no se permite en parches (usa: "+[...PATCH_OK].join(", ")+")."};
+    if(steps[i].length>500)return{err:"Paso "+(i+1)+": es demasiado largo (máximo 500 caracteres)."};
+  }
+  return{steps};
+}
+function describeStep(s){
+  const t=ptoks(s),c=(t[0]||"").toLowerCase(),a=t.slice(1);
+  const sh=x=>"«"+String(x==null?"":x).replace(/\n/g,"↵").slice(0,50)+"»";
+  const lines=x=>(/-/.test(x||"")?"las líneas ":"la línea ")+(x||"?");
+  switch(c){
+    case "reemplazar":return "Reemplazar "+sh(a[0])+" por "+sh(a[1])+((a[2]||"").toLowerCase()==="regex"?" (expresión regular)":"");
+    case "insertar":return "Insertar "+sh(a.slice(2).join(" "))+" "+((a[0]||"").toLowerCase()==="antes"?"antes de ":"después de ")+(/^\d+$/.test(a[1]||"")?"la línea "+a[1]:"la línea que contiene "+sh(a[1]));
+    case "borrar":return "Borrar "+lines(a[0]);
+    case "comentar":return "Comentar "+lines(a[0]);
+    case "descomentar":return "Descomentar "+lines(a[0]);
+    case "receta":return "Aplicar la receta "+sh(a[0]);
+    default:return s;
+  }
+}
 /*PATCH_END*/
 let pf=[],pcur=0,pwin=[1,80],plog=[];
 function pPrint(t,c){plog.push([t,c||""]);if(plog.length>200)plog.shift();const o=$("p_out");if(o){addLine(o,t,c||"");o.scrollTop=o.scrollHeight}}
@@ -977,23 +1182,29 @@ function renderPatch(){
   if($("pshell"))return;
   const v=$("view");
   v.innerHTML=`<div id="pshell"><div class="card" style="margin-bottom:1rem"><b>Script · parchea archivos de tu GDPS con comandos</b>
-    <p class="note">Elige archivos de texto de tu GDPS (php, js, .htaccess, json…). Los comandos los modifican <b>en tu dispositivo</b>; al terminar descargas el archivo parcheado y lo subes a tu servidor. No edita APK ni archivos binarios. Guarda una copia del original antes de subir cambios.</p>
+    <p class="note">Elige archivos de texto de tu GDPS (php, js, .htaccess, json…). Con los botones de abajo los modificas <b>en tu dispositivo</b>; al terminar descargas el archivo parcheado y lo subes a tu servidor. No edita APK ni archivos binarios. Guarda una copia del original antes de subir cambios.</p>
     <input type="file" id="p_files" multiple>
-    <div class="row"><button class="pri" id="p_load">Cargar</button><button id="p_help">Ayuda</button></div></div>
+    <div class="row"><button class="pri" id="p_load">Cargar</button><button id="p_help">Comandos (avanzado)</button></div></div>
     <div class="chips" id="p_chips"></div>
     <div class="term" id="p_view" style="height:40vh;overflow:auto"></div>
-    <div class="row" style="margin:.5rem 0"><button class="sm" id="p_prev">← Anterior</button><button class="sm" id="p_next">Siguiente →</button><button class="sm pri" id="p_dl">Descargar parcheado</button></div>
+    <div class="row" style="margin:.5rem 0"><button class="sm" id="p_prev">← Anterior</button><button class="sm" id="p_next">Siguiente →</button><button class="sm pri" id="p_dl">Descargar parcheado</button><button class="sm" id="p_pub">Publicar como parche</button></div>
+    <div class="chips"><button data-act="find">🔎 Buscar</button><button data-act="rep">🔁 Reemplazar</button><button data-act="ins">➕ Insertar</button><button data-act="del">🗑 Borrar</button><button data-act="com">💬 Comentar</button><button data-act="rec">🧰 Recetas</button><button data-act="stats">📊 Estadísticas</button></div>
+    <div class="chips"><button data-act="undo">↩ Deshacer</button><button data-act="diff">≠ Ver cambios</button><button data-act="goto">↕ Ir a línea</button><button data-act="restore">⟲ Restaurar original</button></div>
+    <div class="l" style="margin:.2rem 0">Resultados</div>
     <div class="term" id="p_out" style="height:22vh"></div>
-    <div class="tin"><input id="p_in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escribe un comando (ayuda)"><button class="pri" id="p_go">Enviar</button></div></div>`;
+    <details style="margin-top:.8rem"><summary class="l" style="cursor:pointer">Modo avanzado: escribir comandos</summary>
+      <div class="tin"><input id="p_in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escribe un comando (ayuda)"><button class="pri" id="p_go">Enviar</button></div></details></div>`;
   $("p_load").onclick=pLoad;
   $("p_help").onclick=()=>pRun("ayuda");
+  document.querySelectorAll("#pshell [data-act]").forEach(b=>b.onclick=()=>pAct(b.dataset.act));
   $("p_dl").onclick=()=>pRun("descargar");
+  $("p_pub").onclick=()=>{const f=pf[pcur];if(!f||!f.rec.length){toast("Primero haz cambios con comandos en un archivo.");return}const e=["php","inc","phtml"].includes(f.ext)?"php":f.ext;openPatchDlg(f.rec,["php","js","htaccess","json","html","txt"].includes(e)?e:"any")};
   const step=d=>{const k=pwin[1]-pwin[0]+1;pwin=[Math.max(1,pwin[0]+d*k),Math.max(1,pwin[0]+d*k)+k-1];pDraw()};
   $("p_prev").onclick=()=>step(-1);$("p_next").onclick=()=>step(1);
   const send=()=>{const i=$("p_in"),l=i.value;i.value="";pRun(l)};
   $("p_go").onclick=send;$("p_in").onkeydown=e=>{if(e.key==="Enter")send()};
   const o=$("p_out");
-  if(!plog.length)pPrint("Script listo. Carga un archivo y escribe ayuda para ver los comandos.");
+  if(!plog.length)pPrint("Script listo. Carga un archivo y usa los botones para modificarlo.");
   else plog.forEach(([t,c])=>addLine(o,t,c));
   pDraw();
 }
@@ -1005,7 +1216,7 @@ async function pLoad(){
     if(!TEXT_EXT.has(ext)){pPrint(f.name+": no es un archivo de texto compatible (se omite).","err");continue}
     if(f.size>2000000){pPrint(f.name+": pasa de 2 MB (se omite).","err");continue}
     const text=await f.text();
-    pf.push({name:f.name,ext,orig:text,text,hist:[]});pcur=pf.length-1;pwin=[1,80];
+    pf.push({name:f.name,ext,orig:text,text,hist:[],rec:[]});pcur=pf.length-1;pwin=[1,80];
     pPrint("Cargado: "+f.name+" ("+text.split("\n").length+" líneas)");
   }
   pDraw();
@@ -1031,11 +1242,187 @@ function pRun(line){
   if(c==="abrir"){const i=Number(line.split(/\s+/)[1])-1;if(pf[i]){pcur=i;pwin=[1,80];pDraw();pPrint("Abierto: "+pf[i].name)}else pPrint("Error: elige un número de la lista (escribe archivos).","err");return}
   if(!pf.length&&c!=="sql"){pPrint("Primero carga un archivo.","err");return}
   if(c==="descargar"||c==="guardar"){const f=pf[pcur];dl(f.name,f.text,"text/plain");pPrint("Descargado: "+f.name+(f.text===f.orig?" (sin cambios)":""));return}
-  const f=pf[pcur]||{text:"",orig:"",hist:[],ext:"txt",name:""};
-  const r=patchCmd(f,line);
+  const f=pf[pcur]||{text:"",orig:"",hist:[],rec:[],ext:"txt",name:""};
+  const before=f.text,r=patchCmd(f,line);
+  if(!r.err&&f.text!==before){if(c==="deshacer")f.rec.pop();else if(c==="restaurar")f.rec=[];else f.rec.push(line)}
   if(r.out)pPrint(r.out,r.err?"err":"");
   if(r.win)pwin=r.win;
   pDraw();
+}
+
+const qs=t=>{t=String(t).replace(/\r?\n/g,"\\n");if(!t.includes('"'))return '"'+t+'"';if(!t.includes("'"))return "'"+t+"'";return null};
+const QERR="El texto no puede tener comillas simples y dobles a la vez.";
+function pAct(k){
+  const run=c=>pRun(c),rl=x=>x.replace(/\s+/g,"");
+  if(k!=="stats"&&!pf.length){toast("Primero carga un archivo.");return}
+  if(k==="undo"){run("deshacer");return}
+  if(k==="diff"){run("diff");return}
+  if(k==="restore"){if(confirm("¿Volver al archivo original? Puedes deshacerlo después."))run("restaurar");return}
+  if(k==="goto"){const n=parseInt(prompt("¿A qué línea quieres ir?"),10);if(n>0){pwin=[Math.max(1,n-5),Math.max(1,n-5)+79];pDraw()}return}
+  if(k==="find")return form("Buscar",[{k:"t",l:"Texto a buscar",raw:1}],null,o=>{const x=qs(o.t);if(!x)throw new Error(QERR);run("buscar "+x)},"","Buscar");
+  if(k==="rep")return form("Reemplazar",[{k:"a",l:"Texto a buscar",raw:1},{k:"b",l:"Reemplazar por (puede quedar vacío)",raw:1,opt:1},{k:"m",l:"Tipo de búsqueda",t:"select",o:["Texto normal","Expresión regular (avanzado)"],d:"Texto normal"}],null,o=>{const a=qs(o.a),b=qs(o.b);if(!a||!b)throw new Error(QERR);run("reemplazar "+a+" "+b+(o.m.startsWith("Expresión")?" regex":""))},"","Reemplazar");
+  if(k==="ins")return form("Insertar",[{k:"w",l:"Dónde",t:"select",o:["Después de","Antes de"],d:"Después de"},{k:"r",l:"Número de línea, o texto que contiene esa línea",ph:"Ej: 12   o   <?php"},{k:"c",l:"Texto a insertar (puede tener varias líneas)",t:"textarea",raw:1}],null,o=>{const ref=/^\d+$/.test(o.r)?o.r:qs(o.r),c=qs(o.c);if(!ref||!c)throw new Error(QERR);run("insertar "+(o.w.startsWith("Antes")?"antes ":"despues ")+ref+" "+c)},"","Insertar");
+  if(k==="del")return form("Borrar líneas",[{k:"r",l:"Línea o rango",ph:"Ej: 12   o   12-15"}],null,o=>run("borrar "+rl(o.r)),"","Borrar");
+  if(k==="com")return form("Comentar líneas",[{k:"a",l:"Acción",t:"select",o:["Comentar","Descomentar"],d:"Comentar"},{k:"r",l:"Línea o rango",ph:"Ej: 12   o   12-15"}],null,o=>run((o.a==="Comentar"?"comentar ":"descomentar ")+rl(o.r)),"","Aplicar");
+  if(k==="rec")return form("Recetas listas",[{k:"n",l:"Receta",t:"select",o:["Ocultar errores de PHP (archivo .php)","Proteger el .htaccess (archivo .htaccess)"],d:"Ocultar errores de PHP (archivo .php)"}],null,o=>run("receta "+(o.n.startsWith("Ocultar")?"ocultar-errores":"htaccess-seguro")),"","Aplicar");
+  if(k==="stats"){
+    const F=[["estrellas","Estrellas"],["demonios","Demonios"],["diamantes","Diamantes"],["monedas","Monedas secretas"],["monedas-usuario","Monedas de usuario"],["orbes","Orbes"],["cp","Puntos de creador"],["lunas","Lunas"]];
+    return form("Modificar estadísticas (genera SQL)",[{k:"u",l:"Nombre del usuario"},...F.map(([x,l])=>({k:x,l,opt:1,ph:"vacío = no cambiar"}))],null,o=>{
+      const parts=[];
+      for(const [x,l] of F){if(o[x]!==""){if(!/^\d{1,10}$/.test(o[x]))throw new Error("«"+l+"» debe ser un número entero.");parts.push(x+"="+o[x])}}
+      if(!parts.length)throw new Error("Escribe al menos una estadística.");
+      const u=qs(o.u);if(!u)throw new Error(QERR);
+      const cmd="sql stats "+u+" "+parts.join(" "),r=patchCmd({text:"",orig:"",hist:[],rec:[],ext:"txt",name:""},cmd);
+      if(r.err)throw new Error(r.out.replace(/^Error: /,""));
+      copy(r.out.split("\n\n")[0],"SQL copiado al portapapeles");
+      run(cmd);
+    },"","Generar SQL");
+  }
+}
+
+/* ---------- Verificador de APK, sello de seguridad y asistente ---------- */
+let vfRes=null,lgd="";
+function pickFile(){return new Promise(res=>{const i=document.createElement("input");i.type="file";i.onchange=()=>res(i.files[0]||null);i.click()})}
+async function apkVerify(expectId){
+  const f=await pickFile();if(!f)return;
+  vfRes='<b>Calculando la huella de '+esc(f.name)+'…</b><div class="l" id="vf_p">0%</div>';if(view==="apk")renderApk();
+  let hash;
+  try{hash=await sha256File(f,pc=>{const e=$("vf_p");if(e)e.textContent=Math.round(pc*100)+"%"})}
+  catch(e){vfRes="No se pudo leer el archivo: "+esc(e.message);if(view==="apk")renderApk();return}
+  let html;
+  if(expectId){
+    const a=apks.find(x=>x.id===expectId);
+    html=a&&a.sha256===hash?"✅ <b>Coincide.</b> «"+esc(f.name)+"» es idéntico al APK «"+esc(a.name)+"» de "+esc(a.author)+".":"⚠️ <b>NO coincide.</b> «"+esc(f.name)+"» no es idéntico a «"+esc(a?a.name:"")+"»: puede ser otra versión o haber sido modificado. No lo instales si no confías en él.";
+  }else{
+    const m=apks.filter(a=>a.sha256===hash);
+    html=m.length?"✅ <b>Coincide</b> con "+m.map(a=>"«"+esc(a.name)+"» de "+esc(a.author)).join(", ")+".":"⚠️ <b>No está en la lista.</b> Ningún APK registrado tiene esa huella.";
+  }
+  vfRes=html+'<div class="l" style="word-break:break-all;margin-top:.4rem">SHA-256: '+esc(hash)+'</div><div class="row" style="margin-top:.5rem"><button class="sm" id="vf_x">Cerrar</button></div>';
+  if(view==="apk")renderApk();
+}
+function badges(g){
+  const b=[];
+  if(g.seal&&g.seal.grade){
+    const d=g.seal.at&&g.seal.at.toDate?g.seal.at.toDate().toLocaleDateString():"",gr=String(g.seal.grade).slice(0,1);
+    b.push('<span class="tag '+(gr==="A"||gr==="B"?"ok":gr==="C"?"warn":"bad")+'" title="Autoanálisis hecho por el dueño con el Escáner'+esc(d?" el "+d:"")+'">🛡 Seguridad '+esc(gr)+' · '+(Number(g.seal.score)||0)+'</span>');
+  }
+  if(g.launchPct)b.push('<span class="tag">🚀 Checklist '+(Number(g.launchPct)||0)+'%</span>');
+  return b.length?'<div style="display:flex;gap:.4rem;flex-wrap:wrap">'+b.join("")+'</div>':"";
+}
+function sealRun(){
+  if(!user){openAuth();return}
+  if(!all.length){toast("Primero registra tu GDPS en Mis GDPS.");return}
+  const nPhp=sfiles.filter(f=>f.text&&PHP_EXT.has(f.ext)).length;
+  if(!nPhp){toast("Analiza al menos un archivo PHP de tu GDPS.");return}
+  const seal=sealCalc(sres,nPhp);
+  form("Publicar sello de seguridad",[{k:"g",l:"¿En qué GDPS? Tu sello: "+seal.grade+" ("+seal.score+"/100)",t:"select",o:all.map(g=>g.name),d:all[0].name}],null,async o=>{
+    const g=all.find(x=>x.name===o.g)||all[0];
+    await updateDoc(doc(db,"gdps",g.id),{seal:{...seal,at:serverTimestamp()}});
+  },"Sello publicado en tu GDPS","Publicar");
+}
+const LAUNCH=[
+ {g:"1. Preparar el servidor",id:"host",t:"Elegir dónde alojar tu GDPS",h:"Busca un hosting con PHP y MySQL que te deje subir archivos (administrador de archivos o FTP). Confirma que acepta alojar un GDPS."},
+ {g:"1. Preparar el servidor",id:"https",t:"Tener tu dirección con https",h:"Necesitas un dominio o subdominio con certificado SSL (https). La Terminal y otras funciones de esta página lo exigen."},
+ {g:"1. Preparar el servidor",id:"db",t:"Crear la base de datos MySQL",h:"Desde el panel del hosting crea una base de datos y un usuario. Anota el nombre, el usuario y la contraseña."},
+ {g:"2. Instalar",id:"files",t:"Subir los archivos del GDPS",h:"Sube el contenido a la carpeta pública que sirve tu dominio, sin una carpeta extra de por medio."},
+ {g:"2. Instalar",id:"config",t:"Conectar los archivos con tu base de datos",h:"Edita el archivo de conexión con los datos de tu base y comprueba que la página de tu GDPS abre sin errores."},
+ {g:"2. Instalar",id:"tables",t:"Crear las tablas y tu cuenta de administrador",h:"Importa el archivo SQL o ejecuta el instalador de tu GDPS. Después crea tu cuenta."},
+ {g:"3. Jugar",id:"client",t:"Preparar el cliente que apunta a tu servidor",h:"Necesitas una app del juego configurada con la dirección de tu GDPS. Compártela en la pestaña APKs junto con su huella.",go:["apk","Ir a APKs"]},
+ {g:"3. Jugar",id:"test",t:"Probar de punta a punta",h:"Crea una cuenta, sube un nivel y comprueba que aparece. Prueba también desde otro dispositivo."},
+ {g:"4. Proteger",id:"scan",t:"Pasar el Escáner a tus archivos",h:"Elige los archivos de tu GDPS en el Escáner y revisa los hallazgos de severidad alta primero.",go:["scan","Ir al Escáner"]},
+ {g:"4. Proteger",id:"fix",t:"Corregir lo que salga (Arreglar con un toque)",h:"Usa el botón de arreglos automáticos y revisa a mano lo que quede pendiente. Prueba los archivos antes de subirlos.",go:["scan","Ir al Escáner"]},
+ {g:"4. Proteger",id:"backup",t:"Hacer una copia de seguridad",h:"Exporta tu base desde phpMyAdmin y guárdala fuera del servidor. Repítelo cada cierto tiempo."},
+ {g:"5. Lanzar",id:"bridge",t:"Conectar la Terminal para administrar",h:"Descarga el bridge.php desde la Terminal, súbelo a tu GDPS y prueba el comando ping.",go:["terminal","Ir a la Terminal"]},
+ {g:"5. Lanzar",id:"publish",t:"Registrar y publicar en la GDPS Store",h:"Registra tu GDPS, completa la ficha y pulsa Publicar en la GDPS Store.",go:["mine","Ir a Mis GDPS"]},
+ {g:"5. Lanzar",id:"announce",t:"Anunciar en tu Discord",h:"Cuéntale a tu comunidad dónde descargar el juego y cómo registrarse."}
+];
+function launchState(){
+  const g=lgd&&all.find(x=>x.id===lgd);
+  if(g)return{cur:g.launch||{},g};
+  try{return{cur:JSON.parse(lsGet("gm_launch")||"{}"),g:null}}catch(e){return{cur:{},g:null}}
+}
+async function launchToggle(id){
+  const{cur,g}=launchState(),nw={...cur,[id]:!cur[id]};
+  if(g){
+    const pct=Math.round(LAUNCH.filter(s=>nw[s.id]).length/LAUNCH.length*100);
+    try{await updateDoc(doc(db,"gdps",g.id),{launch:nw,launchPct:pct})}catch(e){toast(errTxt(e))}
+  }else{lsSet("gm_launch",JSON.stringify(nw));renderLaunch()}
+}
+function renderLaunch(){
+  const v=$("view");
+  if(lgd&&!all.some(x=>x.id===lgd))lgd="";
+  const{cur}=launchState();
+  const done=LAUNCH.filter(s=>cur[s.id]).length,pct=Math.round(done/LAUNCH.length*100);
+  const groups=[...new Set(LAUNCH.map(s=>s.g))];
+  v.innerHTML=`<p class="note">Una guía para lanzar tu GDPS paso a paso. Marca cada paso cuando lo termines.${user&&all.length?" Elige un GDPS para guardar el progreso en tu cuenta y mostrarlo en la Store.":" Inicia sesión y registra tu GDPS para guardar el progreso en tu cuenta."}</p>
+  ${user&&all.length?`<label for="l_g">Progreso de</label><select id="l_g"><option value="">Solo en este dispositivo</option>${all.map(x=>`<option value="${x.id}" ${x.id===lgd?"selected":""}>${esc(x.name)}</option>`).join("")}</select>`:""}
+  <div class="card" style="margin:1rem 0"><b>${done} de ${LAUNCH.length} pasos · ${pct}%</b><progress value="${pct}" max="100" style="width:100%;margin-top:.5rem"></progress></div>
+  ${groups.map(gr=>`<h3>${esc(gr)}</h3>`+LAUNCH.filter(s=>s.g===gr).map(s=>`<div class="arow"><div style="flex:1;min-width:200px"><b>${cur[s.id]?"✅":"⬜"} ${esc(s.t)}</b><details><summary class="l" style="cursor:pointer">Cómo hacerlo</summary><p class="note">${esc(s.h)}</p></details></div><div class="btns">${s.go?`<button class="sm" data-go="${s.go[0]}">${esc(s.go[1])}</button>`:""}<button class="sm ${cur[s.id]?"":"pri"}" data-t="${s.id}">${cur[s.id]?"Desmarcar":"Hecho"}</button></div></div>`).join("")).join("")}`;
+  if($("l_g"))$("l_g").onchange=e=>{lgd=e.target.value;renderLaunch()};
+  v.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>launchToggle(b.dataset.t));
+  v.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+}
+
+/* ---------- Biblioteca de parches ---------- */
+let patches=[];
+onSnapshot(query(collection(db,"patches"),orderBy("createdAt","desc"),limit(100)),s=>{patches=mapDocs(s);if(view==="patches")renderPatches();if(view==="admin")render()},e=>toast(errTxt(e)));
+function openPatchDlg(steps,ext){
+  if(!user){openAuth();return}
+  if(isBanned){toast("Un administrador te baneó de Global y APKs.");return}
+  $("pt_name").value="";$("pt_desc").value="";$("pt_steps").value=(steps||[]).join("\n");
+  $("pt_ext").value=ext||"any";$("pt_msg").textContent="";ptList();$("patchDlg").showModal();
+}
+function ptList(){const l=$("pt_steps").value.split("\n").map(x=>x.trim()).filter(Boolean);$("pt_list").textContent=l.length?l.map((x,i)=>(i+1)+". "+describeStep(x)).join("\n"):"Aún no hay pasos."}
+$("pt_steps").oninput=ptList;
+$("ptNo").onclick=()=>$("patchDlg").close();
+$("ptOk").onclick=async()=>{
+  const m=t=>$("pt_msg").textContent=t;
+  const name=$("pt_name").value.trim(),desc=$("pt_desc").value.trim(),ext=$("pt_ext").value,res=validSteps($("pt_steps").value);
+  if(!name){m("Escribe un nombre.");return}
+  if(res.err){m(res.err);return}
+  try{
+    await addDoc(collection(db,"patches"),{uid:user.uid,author:aname(),name,desc,ext,steps:res.steps,likes:[],createdAt:serverTimestamp()});
+    $("patchDlg").close();toast("Parche publicado");
+  }catch(e){m(errTxt(e))}
+};
+function renderPatches(){
+  const v=$("view");
+  const rows=patches.filter(p=>!q||((p.name||"")+(p.desc||"")+(p.author||"")).toLowerCase().includes(q.toLowerCase()))
+    .sort((a,b)=>(b.likes||[]).length-(a.likes||[]).length||(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  v.innerHTML=`<p class="note">Parches de la comunidad para la pestaña Script. Cada parche es una lista de comandos que puedes leer antes de aplicar. Después de aplicarlo, el Escáner te avisa si metió algo sospechoso. Aplica solo los que entiendas.</p>
+  <div class="bar"><input id="q" placeholder="Buscar parche" value="${esc(q)}"><button class="pri" id="pnew">Publicar parche</button></div>
+  ${rows.length?`<div class="grid">${rows.map(p=>`<div class="card"><h3>${esc(p.name)}</h3><div class="l">por ${esc(p.author)} · para ${p.ext==="any"?"cualquier archivo":"."+esc(p.ext)} · ${(p.steps||[]).length} paso(s)</div>${p.desc?`<p>${esc(p.desc)}</p>`:""}<details><summary class="l" style="cursor:pointer">Ver pasos</summary><code class="snip">${esc((p.steps||[]).map((s,i)=>(i+1)+". "+describeStep(s)).join("\n"))}</code></details><div class="links"><button class="sm pri" data-pa="apply" data-id="${p.id}">Aplicar en Script</button><button class="sm" data-pa="like" data-id="${p.id}">💜 ${(p.likes||[]).length}</button>${user&&(p.uid===user.uid||can("posts"))?`<button class="sm dng" data-pa="del" data-id="${p.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Aún no hay parches. Haz cambios en Script y publícalos desde ahí.</div>'}`;
+  keepSearch(renderPatches);
+  $("pnew").onclick=()=>openPatchDlg([],"any");
+  v.querySelectorAll("[data-pa]").forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.id,k=b.dataset.pa,p=patches.find(x=>x.id===id);if(!p)return;
+    if(k==="apply"){applyPatch(id);return}
+    if(!user){openAuth();return}
+    try{
+      if(k==="like")await updateDoc(doc(db,"patches",id),{likes:(p.likes||[]).includes(user.uid)?arrayRemove(user.uid):arrayUnion(user.uid)});
+      else if(confirm("¿Eliminar este parche?"))await deleteDoc(doc(db,"patches",id));
+    }catch(e){toast(errTxt(e))}
+  });
+}
+function applyPatch(id){
+  const p=patches.find(x=>x.id===id);if(!p)return;
+  const steps=p.steps||[];
+  if(!pf.length){pPrint("Carga un archivo para aplicar el parche «"+p.name+"».","err");toast("Primero carga un archivo en Script");view="script";q="";render();return}
+  const f=pf[pcur],fam=e=>["php","inc","phtml"].includes(e)?"php":e;
+  if(p.ext!=="any"&&fam(f.ext)!==fam(p.ext)){toast("Este parche es para archivos ."+p.ext+" y tienes abierto un ."+f.ext);return}
+  const bad=validSteps(steps.join("\n"));if(bad.err){toast("Parche no válido: "+bad.err);return}
+  if(!confirm("¿Aplicar «"+p.name+"» a "+f.name+"?\n\nPasos:\n"+steps.slice(0,8).map((s,i)=>(i+1)+". "+describeStep(s).slice(0,90)).join("\n")+(steps.length>8?"\n…":"")+"\n\nSe prueba primero y puedes deshacerlo."))return;
+  const t={name:f.name,ext:f.ext,orig:f.orig,text:f.text,hist:[]};
+  for(let i=0;i<steps.length;i++){const r=patchCmd(t,steps[i]);if(r.err){toast("Falló el paso "+(i+1)+": "+r.out);return}}
+  const oldText=f.text;
+  for(const st of steps){const b=f.text;patchCmd(f,st);if(f.text!==b)f.rec.push(st)}
+  const key=x=>x.id+"|"+x.snippet;
+  const seen=new Set(scanAll([{path:f.name,ext:f.ext,text:oldText}]).map(key));
+  const nw=scanAll([{path:f.name,ext:f.ext,text:f.text}]).filter(x=>!seen.has(key(x)));
+  pPrint("Parche «"+p.name+"» aplicado ("+steps.length+" paso(s)) a "+f.name+".");
+  pPrint(nw.length?"⚠ El parche introdujo "+nw.length+" posible(s) hallazgo(s) de seguridad:\n"+nw.slice(0,5).map(x=>"["+SEV_N[x.sev]+"] "+x.name+": "+x.snippet).join("\n"):"El Escáner no encontró hallazgos de seguridad nuevos tras el parche.",nw.length?"err":"");
+  pPrint("Revisa con diff y baja el archivo con descargar. Si algo no te gusta: deshacer.");
+  pwin=[1,80];view="script";q="";render();
 }
 
 const RULES=String.raw`rules_version = '2';
@@ -1124,6 +1511,13 @@ service cloud.firestore {
     match /global_chat/{id} {
       allow read: if true;
       allow create: if notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500;
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canPosts());
+    }
+
+    match /patches/{id} {
+      allow read: if true;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.steps is list && request.resource.data.steps.size() > 0 && request.resource.data.steps.size() <= 30;
+      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']);
       allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canPosts());
     }
 
