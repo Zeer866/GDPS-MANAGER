@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>GDPS MANAGER</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF4D8D'/><rect x='28' y='28' width='44' height='44' fill='%2314122B'/></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#14122B;--panel:#1E1B3F;--line:#322E63;--tx:#EDEBFF;--mut:#9C98C9;--pink:#FF4D8D;--cyan:#3FD5FF;--ok:#4ADE80;--bad:#FF6B6B;font-family:Rubik,system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;border-radius:8px;padding:.5rem .9rem;background:var(--line);transition:background .15s}
+button:hover{background:#443f86}
+button.pri{background:var(--pink);color:#fff;font-weight:500}
+button.pri:hover{background:#ff6ba0}
+button.dng{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+button.sm{padding:.3rem .6rem;font-size:.85rem}
+a{color:var(--cyan)}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.6rem .7rem}
+label{display:block;margin:.7rem 0 .25rem;color:var(--mut);font-size:.9rem}
+header{display:flex;align-items:center;gap:1rem;padding:.8rem 1rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{margin:0;font-size:1.2rem}header h1 b{color:var(--pink)}
+.who{margin-left:auto;color:var(--mut);font-size:.85rem;display:flex;gap:.6rem;align-items:center}
+nav{display:flex;gap:.3rem;overflow-x:auto;padding:.6rem 1rem;border-bottom:1px solid var(--line)}
+nav button{background:transparent;white-space:nowrap;color:var(--mut)}
+nav button.on{background:var(--panel);color:var(--tx);box-shadow:inset 0 -2px var(--pink)}
+main{padding:1rem;max-width:1100px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.8rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;display:flex;flex-direction:column;gap:.4rem}
+.card h3{margin:0;font-size:1.1rem}
+.l{color:var(--mut);font-size:.9rem}
+.card p{margin:0;line-height:1.4;word-break:break-word}
+.links{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:auto;padding-top:.4rem}
+.bar{display:flex;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.bar input{flex:1;min-width:160px}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--mut);font-weight:500;font-size:.9rem;background:var(--panel)}
+tr:last-child td{border-bottom:0}
+td.act{white-space:nowrap;display:flex;gap:.3rem}
+.tag{display:inline-block;padding:.1rem .5rem;border-radius:99px;font-size:.8rem;background:var(--line)}
+.tag.ok{background:#14532d;color:var(--ok)}.tag.bad{background:#5b1a1a;color:var(--bad)}.tag.cy{background:#0c4a5e;color:var(--cyan)}
+.empty{padding:2rem;text-align:center;color:var(--mut)}
+.note{color:var(--mut);max-width:60ch;line-height:1.5}
+.sub{display:flex;gap:.3rem;margin:1rem 0;overflow-x:auto}
+.sub button{background:transparent;color:var(--mut)}.sub button.on{background:var(--panel);color:var(--tx);box-shadow:inset 0 -2px var(--cyan)}
+.ficha{max-width:520px}
+.row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);border-radius:14px;width:min(420px,92vw);padding:1.2rem}
+dialog::backdrop{background:#000a}
+dialog h2{margin:0 0 .5rem;font-size:1.1rem}
+.msg{margin-top:.8rem;color:var(--bad);min-height:1.2em;font-size:.95rem;word-break:break-word}
+pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem;overflow:auto;font-size:.8rem;line-height:1.5}
+.toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--cyan);padding:.6rem 1rem;border-radius:10px;z-index:9;max-width:90vw}
+.pre{white-space:pre-wrap;word-break:break-word}
+.post{margin-bottom:.8rem}
+.chatbox{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;padding:.2rem}
+.cm{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.5rem .8rem;max-width:90%;align-self:flex-start}
+.cm.me{align-self:flex-end;border-color:var(--pink)}
+progress{accent-color:var(--pink)}
+h3{margin:1.5rem 0 .5rem}
+.term{background:#0b0a1c;border:1px solid var(--line);border-radius:12px;padding:.8rem;height:50vh;overflow-y:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;line-height:1.5}
+.term div{white-space:pre-wrap;word-break:break-word}
+.term .in{color:var(--cyan)}.term .err{color:var(--bad)}
+.tin{display:flex;gap:.5rem;margin-top:.6rem}
+.chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .8rem}
+.chips button{font-size:.85rem}.chips button.on{background:var(--pink);color:#fff}
+.n{font-size:1.8rem;font-weight:700;color:var(--cyan)}
+.tag.warn{background:#5b4a14;color:#ffd166}
+.arow{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem;margin-bottom:.5rem}
+.arow .btns{display:flex;gap:.3rem;flex-wrap:wrap}
+.snip{display:block;background:#0b0a1c;border-radius:8px;padding:.4rem .6rem;font-size:.8rem;overflow-x:auto;white-space:pre;margin:.3rem 0}
+.chk{display:flex;gap:.6rem;align-items:center;color:var(--tx);margin:.6rem 0}.chk input{width:auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><h1>GDPS <b>MANAGER</b></h1><div class="who" id="who"></div></header>
+<nav id="nav"></nav>
+<main id="view"></main>
+
+<dialog id="auth">
+  <form id="afrm" method="dialog">
+    <h2>Entrar a GDPS MANAGER</h2>
+    <label for="em">Correo</label><input id="em" type="email" autocomplete="email">
+    <label for="pw">Contraseña</label><input id="pw" type="password" autocomplete="current-password">
+    <div class="row"><button type="button" class="pri" id="btnIn">Entrar</button><button type="button" id="btnUp">Crear cuenta</button><button type="button" id="aNo">Cerrar</button></div>
+    <div class="msg" id="aMsg"></div>
+  </form>
+</dialog>
+
+<dialog id="dlg">
+  <form method="dialog" id="frm">
+    <h2 id="dlgT"></h2><div id="dlgF"></div>
+    <div class="row"><button class="pri" value="ok">Guardar</button><button type="button" id="dlgNo">Cancelar</button></div>
+  </form>
+</dialog>
+
+<dialog id="apkDlg">
+  <h2>Subir APK</h2>
+  <label for="a_name">Nombre</label><input id="a_name" maxlength="60">
+  <label for="a_ver">Versión (opcional)</label><input id="a_ver" maxlength="20">
+  <label for="a_desc">Descripción (opcional)</label><textarea id="a_desc" rows="2" maxlength="300"></textarea>
+  <label for="a_file">Archivo APK de tu celular</label><input id="a_file" type="file" accept=".apk,application/vnd.android.package-archive">
+  <progress id="a_prog" value="0" max="100" style="width:100%;margin-top:.6rem"></progress><div class="l" id="a_pt"></div>
+  <label for="a_link">…o pega un link de descarga</label><input id="a_link" placeholder="https://...">
+  <div class="row"><button class="pri" id="apkOk">Guardar</button><button id="apkNo">Cancelar</button></div>
+  <div class="msg" id="a_msg"></div>
+</dialog>
+
+<dialog id="permDlg">
+  <h2 id="pT">Permisos</h2>
+  <label class="chk"><input type="checkbox" id="p_posts"> Moderar Global (borrar publicaciones y mensajes, banear)</label>
+  <label class="chk"><input type="checkbox" id="p_apks"> Moderar APKs (borrar APKs)</label>
+  <label class="chk"><input type="checkbox" id="p_gdps"> Moderar GDPS Store (despublicar o borrar GDPS)</label>
+  <label class="chk"><input type="checkbox" id="p_admins"> Gestionar administradores (añadir, quitar, cambiar permisos)</label>
+  <div class="row"><button class="pri" id="pOk">Guardar</button><button id="pNo">Cancelar</button></div>
+</dialog>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where,orderBy,limit,arrayUnion,arrayRemove,getDocs,setDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getStorage,ref as sref,uploadBytesResumable,getDownloadURL,deleteObject} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+const app=initializeApp({
+  apiKey:"AIzaSyDtTHh-lEkgbvYpkM_YApre2qHzTlyTeIM",
+  authDomain:"gdma-c6f47.firebaseapp.com",
+  projectId:"gdma-c6f47",
+  storageBucket:"gdma-c6f47.firebasestorage.app",
+  messagingSenderId:"37211496586",
+  appId:"1:37211496586:web:f4839f0b97b5db321d8d73"
+});
+const auth=getAuth(app), db=getFirestore(app), storage=getStorage(app);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const url=u=>/^https?:\/\//i.test(u||"")?esc(u):"";
+const errTxt=e=>({"auth/invalid-credential":"Correo o contraseña incorrectos.","auth/email-already-in-use":"Ese correo ya tiene cuenta. Pulsa Entrar.","auth/weak-password":"La contraseña necesita al menos 6 caracteres.","auth/invalid-email":"El correo no es válido.","permission-denied":"No tienes permiso, o faltan las reglas nuevas en Firestore (pestaña Reglas)."}[e.code]||e.message);
+function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),3500)}
+
+/* ---------- Esquemas ---------- */
+const FG=[
+ {k:"name",l:"Nombre del GDPS"},{k:"owner",l:"Nombre del dueño"},
+ {k:"desc",l:"Descripción",t:"textarea",opt:1},
+ {k:"discord",l:"Link de Discord",opt:1,u:1},{k:"apk",l:"Descarga Android (APK)",opt:1,u:1},
+ {k:"pc",l:"Descarga PC",opt:1,u:1},{k:"dash",l:"Link del dashboard",opt:1,u:1}];
+const SUB={
+ announcements:{label:"Anuncios",one:"anuncio",fields:[{k:"title",l:"Título"},{k:"body",l:"Mensaje",t:"textarea"}],cols:["title","body","createdAt"]},
+ levels:{label:"Niveles",one:"nivel",fields:[{k:"name",l:"Nombre del nivel"},{k:"author",l:"Autor"},
+  {k:"difficulty",l:"Dificultad",t:"select",o:["Auto","Easy","Normal","Hard","Harder","Insane","Demon"],d:"Normal"},{k:"downloads",l:"Descargas",t:"number",d:0}],
+  cols:["name","author","difficulty","downloads","featured"],toggle:{k:"featured",on:"Quitar destacado",off:"Destacar"},init:{featured:false}},
+ members:{label:"Usuarios",one:"usuario",fields:[{k:"name",l:"Nombre"},{k:"role",l:"Rol",t:"select",o:["Jugador","Mod","Admin"],d:"Jugador"},{k:"stars",l:"Estrellas",t:"number",d:0}],
+  cols:["name","role","stars","banned"],toggle:{k:"banned",on:"Desbanear",off:"Banear"},init:{banned:false}}
+};
+const SUBTABS=["ficha",...Object.keys(SUB)];
+const SN={ficha:"Ficha"};
+
+/* ---------- Estado ---------- */
+let user=null,view="dir",cur=null,sub="ficha",q="",store=[],all=[],subData=[],subUnsub=null,mineUnsub=null;
+const mapDocs=s=>s.docs.map(d=>({id:d.id,...d.data()}));
+onSnapshot(query(collection(db,"gdps"),where("published","==",true)),s=>{store=mapDocs(s);render()},e=>toast(errTxt(e)));
+onAuthStateChanged(auth,u=>{
+  user=u;stopAdmin();if(mineUnsub){mineUnsub();mineUnsub=null}all=[];
+  if(u){$("auth").close();startUser(u);mineUnsub=onSnapshot(query(collection(db,"gdps"),where("ownerUid","==",u.uid)),s=>{all=mapDocs(s);render()},e=>toast(errTxt(e)))}
+  else if(["mine","gdps","terminal","admin"].includes(view))view="dir";
+  render()});
+
+/* ---------- Auth ---------- */
+const am=m=>$("aMsg").textContent=m;
+function openAuth(){am("");$("auth").showModal()}
+$("aNo").onclick=()=>$("auth").close();
+$("btnIn").onclick=()=>signInWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value).catch(e=>am(errTxt(e)));
+$("btnUp").onclick=()=>createUserWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value).catch(e=>am(errTxt(e)));
+
+/* ---------- Formulario genérico ---------- */
+function form(title,fields,vals,onSave){
+  $("dlgT").textContent=title;
+  $("dlgF").innerHTML=fields.map(f=>{
+    const val=vals?vals[f.k]:(f.d??"");const id="f_"+f.k;
+    const inp=f.t==="select"?`<select id="${id}">${f.o.map(o=>`<option ${o==val?"selected":""}>${esc(o)}</option>`).join("")}</select>`
+      :f.t==="textarea"?`<textarea id="${id}" rows="3">${esc(val)}</textarea>`
+      :`<input id="${id}" type="${f.t||"text"}" value="${esc(val)}">`;
+    return `<label for="${id}">${esc(f.l)}</label>${inp}`}).join("");
+  const d=$("dlg");d.showModal();$("dlgNo").onclick=()=>d.close();
+  $("frm").onsubmit=async e=>{
+    e.preventDefault();const o=read(fields,"f_");if(!o)return;
+    try{await onSave(o);d.close();toast("Guardado")}catch(er){toast(errTxt(er))}
+  };
+}
+function read(fields,pre){
+  const o={};
+  for(const f of fields){
+    let x=$(pre+f.k).value.trim();if(f.t==="number")x=Number(x)||0;
+    if(x===""&&!f.opt){toast("Completa “"+f.l+"”");return null}
+    if(f.u&&x&&!/^https?:\/\//i.test(x)){toast("“"+f.l+"” debe empezar con https://");return null}
+    o[f.k]=x}
+  return o;
+}
+
+/* ---------- Render ---------- */
+function setNav(){
+  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"],["scan","Escáner"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);if(myAdmin||(user&&!setupExists))t.push(["admin","Admin"]);t.push(["rules","Reglas"]);
+  $("nav").innerHTML=t.map(([k,l])=>`<button data-v="${k}" class="${(view===k||(view==="gdps"&&k==="mine"))?"on":""}">${l}</button>`).join("");
+  $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.v));
+  $("who").innerHTML=user?`<span>${esc(user.email)}</span><button class="sm" id="out">Salir</button>`:`<button class="pri sm" id="inb">Entrar</button>`;
+  if(user)$("out").onclick=()=>signOut(auth);else $("inb").onclick=openAuth;
+}
+function go(v){view=v;q="";if(subUnsub){subUnsub();subUnsub=null}render()}
+function keepSearch(fn){const i=$("q");if(!i)return;i.oninput=()=>{q=i.value;fn();const n=$("q");n.focus();n.setSelectionRange(q.length,q.length)}}
+
+function gcard(g,mine){
+  const links=[["Discord",g.discord],["Android",g.apk],["PC",g.pc],["Dashboard",g.dash]].filter(x=>url(x[1]))
+    .map(([l,u])=>`<a href="${url(u)}" target="_blank" rel="noopener">${l}</a>`).join("");
+  return `<div class="card"><h3>${esc(g.name)}</h3>${mine?`<div><span class="tag ${g.published?"ok":""}">${g.published?"Publicado en la Store":"Borrador"}</span></div>`:""}<div class="l">por ${esc(g.owner)}</div>${g.desc?`<p>${esc(g.desc)}</p>`:""}
+    <div class="links">${links||'<span class="l">Sin links todavía</span>'}</div>
+    ${mine?`<button class="pri sm" data-m="${g.id}">Gestionar</button>`:""}</div>`;
+}
+function render(){
+  setNav();const v=$("view");
+  if(view==="global"){renderGlobal();return}
+  if(view==="apk"){renderApk();return}
+  if(view==="terminal"){renderTerminal();return}
+  if(view==="scan"){renderScan();return}
+  if(view==="admin"){renderAdmin();return}
+  if(view==="rules"){
+    v.innerHTML=`<p class="note">Copia cada bloque donde corresponde y toca Publicar.</p>
+    <h3>1. Firebase → Firestore → Reglas</h3><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp">Copiar reglas de Firestore</button></div><pre>${esc(RULES)}</pre>
+    <h3>2. Firebase → Storage → Reglas (solo si subes APKs con Storage)</h3><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp2">Copiar reglas de Storage</button></div><pre>${esc(SRULES)}</pre>`;
+    $("cp").onclick=()=>copy(RULES,"Reglas copiadas");$("cp2").onclick=()=>copy(SRULES,"Reglas copiadas");return;
+  }
+  if(view==="dir"){
+    const rows=store.filter(g=>!q||(g.name+g.owner+g.desc).toLowerCase().includes(q.toLowerCase()));
+    v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar en la GDPS Store" value="${esc(q)}">${user?"":'<button class="pri" id="inb2">Entrar para publicar el tuyo</button>'}</div>
+    ${rows.length?`<div class="grid">${rows.map(g=>gcard(g,false)).join("")}</div>`:`<div class="empty">La GDPS Store está vacía. Entra, registra tu GDPS y publícalo.</div>`}`;
+    keepSearch(render);if($("inb2"))$("inb2").onclick=openAuth;return;
+  }
+  if(view==="mine"){
+    const mine=all.filter(g=>g.ownerUid===user.uid);
+    v.innerHTML=`<div class="bar"><button class="pri" id="new">Registrar GDPS</button></div>
+    ${mine.length?`<div class="grid">${mine.map(g=>gcard(g,true)).join("")}</div>`:`<div class="empty">Todavía no has registrado ningún GDPS. Pulsa “Registrar GDPS”.</div>`}`;
+    $("new").onclick=()=>form("Registrar GDPS",FG,null,async o=>{
+      const r=await addDoc(collection(db,"gdps"),{...o,ownerUid:user.uid,published:false,createdAt:serverTimestamp()});
+      cur=r.id;sub="ficha";view="gdps";render()});
+    v.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{cur=b.dataset.m;sub="ficha";q="";view="gdps";subscribe();render()});return;
+  }
+  if(view==="gdps"){
+    const g=all.find(x=>x.id===cur);
+    if(!user){view="dir";render();return}
+    if(!g){v.innerHTML='<div class="empty">Cargando…</div>';return}
+    v.innerHTML=`<div class="bar"><button id="back">← Mis GDPS</button><h2 style="margin:0">${esc(g.name)}</h2></div>
+    <div class="sub">${SUBTABS.map(t=>`<button data-s="${t}" class="${t===sub?"on":""}">${esc(SN[t]||SUB[t].label)}</button>`).join("")}</div><div id="body"></div>`;
+    $("back").onclick=()=>go("mine");
+    v.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{sub=b.dataset.s;q="";subscribe();render()});
+    sub==="ficha"?ficha(g):table();
+  }
+}
+function ficha(g){
+  $("body").innerHTML=`<div class="ficha"><p class="note">${g.published?"Tu GDPS aparece en la GDPS Store.":"Tu GDPS es un borrador: solo tú lo ves. Pulsa Publicar para mostrarlo en la GDPS Store."}</p>${FG.map(f=>`<label for="g_${f.k}">${esc(f.l)}</label>${f.t==="textarea"?`<textarea id="g_${f.k}" rows="3">${esc(g[f.k])}</textarea>`:`<input id="g_${f.k}" value="${esc(g[f.k])}">`}`).join("")}
+  <div class="row"><button class="pri" id="sv">Guardar ficha</button><button id="pub">${g.published?"Quitar de la GDPS Store":"Publicar en la GDPS Store"}</button><button class="dng" id="del">Eliminar GDPS</button></div></div>`;
+  $("sv").onclick=async()=>{const o=read(FG,"g_");if(!o)return;try{await updateDoc(doc(db,"gdps",cur),o);toast("Ficha guardada")}catch(e){toast(errTxt(e))}};
+  $("pub").onclick=async()=>{try{await updateDoc(doc(db,"gdps",cur),{published:!g.published});toast(g.published?"Quitado de la Store":"Publicado en la Store")}catch(e){toast(errTxt(e))}};
+  $("del").onclick=async()=>{if(!confirm("¿Eliminar este GDPS? No se puede deshacer."))return;try{await deleteDoc(doc(db,"gdps",cur));go("mine")}catch(e){toast(errTxt(e))}};
+}
+function fmt(k,v){
+  if(k==="banned")return v?'<span class="tag bad">Baneado</span>':'<span class="tag ok">Activo</span>';
+  if(k==="featured")return v?'<span class="tag cy">Destacado</span>':"";
+  if(k==="createdAt")return v?.toDate?esc(v.toDate().toLocaleDateString()):"";
+  return esc(v);
+}
+function table(){
+  const s=SUB[sub];
+  const rows=subData.filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  const H={banned:"Estado",featured:"Destacado",createdAt:"Fecha"};
+  const head=s.cols.map(k=>`<th>${esc((s.fields.find(f=>f.k===k)||{}).l||H[k])}</th>`).join("")+"<th></th>";
+  const body=rows.map(r=>`<tr>${s.cols.map(k=>`<td>${fmt(k,r[k])}</td>`).join("")}<td class="act">
+    ${s.toggle?`<button class="sm" data-a="tg" data-id="${r.id}">${r[s.toggle.k]?s.toggle.on:s.toggle.off}</button>`:""}
+    <button class="sm" data-a="ed" data-id="${r.id}">Editar</button><button class="sm dng" data-a="rm" data-id="${r.id}">Eliminar</button></td></tr>`).join("");
+  $("body").innerHTML=`<div class="bar"><input id="q" placeholder="Buscar en ${esc(s.label.toLowerCase())}" value="${esc(q)}"><button class="pri" id="add">Añadir ${s.one}</button></div>
+  <div class="wrap">${rows.length?`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`:`<div class="empty">No hay ${esc(s.label.toLowerCase())} todavía. Pulsa “Añadir ${s.one}”.</div>`}</div>`;
+  keepSearch(table);
+  $("add").onclick=()=>form("Añadir "+s.one,s.fields,null,o=>addDoc(collection(db,"gdps",cur,sub),{...o,...(s.init||{}),createdAt:serverTimestamp()}));
+  $("body").querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.id,r=subData.find(x=>x.id===id),ref=doc(db,"gdps",cur,sub,id);
+    try{
+      if(b.dataset.a==="tg")await updateDoc(ref,{[s.toggle.k]:!r[s.toggle.k]});
+      else if(b.dataset.a==="rm"){if(confirm("¿Eliminar este "+s.one+"?"))await deleteDoc(ref)}
+      else form("Editar "+s.one,s.fields,r,o=>updateDoc(ref,o));
+    }catch(e){toast(errTxt(e))}
+  });
+}
+function subscribe(){
+  if(subUnsub){subUnsub();subUnsub=null}subData=[];
+  if(sub==="ficha"||!cur)return;
+  subUnsub=onSnapshot(collection(db,"gdps",cur,sub),s=>{subData=s.docs.map(d=>({id:d.id,...d.data()}));if(view==="gdps"&&sub!=="ficha")table()},e=>toast(errTxt(e)));
+}
+
+/* ---------- Global y APKs ---------- */
+let gsub="posts",posts=[],chat=[],apks=[];
+const aname=()=>user?(user.email||"usuario").split("@")[0]:"";
+const when=t=>t?.toDate?t.toDate().toLocaleString():"";
+const fmtSize=b=>!b?"":b>1048576?(b/1048576).toFixed(1)+" MB":Math.round(b/1024)+" KB";
+function copy(t,m){(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast(m||"Link copiado")).catch(()=>prompt("Copia el texto:",t))}
+onSnapshot(query(collection(db,"global_posts"),orderBy("createdAt","desc"),limit(50)),s=>{posts=mapDocs(s);if(view==="global")renderGlobal()},e=>toast(errTxt(e)));
+onSnapshot(query(collection(db,"global_chat"),orderBy("createdAt","desc"),limit(100)),s=>{chat=mapDocs(s);if(view==="global")renderGlobal()},e=>toast(errTxt(e)));
+onSnapshot(query(collection(db,"apks"),orderBy("createdAt","desc"),limit(100)),s=>{apks=mapDocs(s);if(view==="apk")renderApk()},e=>toast(errTxt(e)));
+
+function renderGlobal(){
+  const v=$("view");
+  if(!$("gshell")){
+    v.innerHTML='<div id="gshell"><div class="sub"><button data-g="posts">Publicaciones</button><button data-g="chat">Chat</button></div><div id="gform"></div><div id="glist"></div></div>';
+    v.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{gsub=b.dataset.g;renderGlobal()});
+  }
+  v.querySelectorAll("[data-g]").forEach(b=>b.classList.toggle("on",b.dataset.g===gsub));
+  const key=gsub+(user?user.uid:"-"),f=$("gform");
+  if(f.dataset.k!==key){
+    f.dataset.k=key;
+    if(!user)f.innerHTML='<div class="bar"><span class="note">Entra para participar.</span><button class="pri" id="gin">Entrar</button></div>';
+    else if(gsub==="posts")f.innerHTML='<div class="card" style="margin-bottom:1rem"><textarea id="gp" rows="3" maxlength="1000" placeholder="¿Qué quieres compartir?"></textarea><div class="row" style="margin:0"><button class="pri" id="gsend">Publicar</button></div></div>';
+    else f.innerHTML='<div class="bar"><input id="gc" maxlength="500" placeholder="Escribe un mensaje"><button class="pri" id="gsend">Enviar</button></div>';
+    if(!user)$("gin").onclick=openAuth;
+    else{
+      const send=async()=>{
+        if(isBanned){toast("Un administrador te baneó de Global y APKs.");return}
+        const el=$(gsub==="posts"?"gp":"gc"),text=el.value.trim();if(!text)return;
+        try{await addDoc(collection(db,gsub==="posts"?"global_posts":"global_chat"),{uid:user.uid,author:aname(),text,...(gsub==="posts"?{likes:[]}:{}),createdAt:serverTimestamp()});el.value=""}
+        catch(e){toast(errTxt(e))}
+      };
+      $("gsend").onclick=send;
+      if(gsub==="chat")$("gc").onkeydown=e=>{if(e.key==="Enter")send()};
+    }
+  }
+  const L=$("glist");
+  if(gsub==="posts"){
+    L.className="";
+    L.innerHTML=posts.length?posts.map(p=>{
+      const n=(p.likes||[]).length,liked=user&&(p.likes||[]).includes(user.uid);
+      return `<div class="card post"><div class="l"><b>${esc(p.author)}</b> · ${esc(when(p.createdAt))}</div><p class="pre">${esc(p.text)}</p><div class="row" style="margin:0"><button class="sm" data-l="${p.id}">${liked?"💜":"🤍"} ${n}</button>${user&&(p.uid===user.uid||can("posts"))?`<button class="sm dng" data-d="${p.id}">Eliminar</button>`:""}</div></div>`}).join(""):'<div class="empty">Aún no hay publicaciones. Sé el primero.</div>';
+    L.querySelectorAll("[data-l]").forEach(b=>b.onclick=async()=>{
+      if(!user){openAuth();return}
+      const p=posts.find(x=>x.id===b.dataset.l);
+      try{await updateDoc(doc(db,"global_posts",p.id),{likes:(p.likes||[]).includes(user.uid)?arrayRemove(user.uid):arrayUnion(user.uid)})}catch(e){toast(errTxt(e))}
+    });
+    L.querySelectorAll("[data-d]").forEach(b=>b.onclick=async()=>{if(!confirm("¿Eliminar tu publicación?"))return;try{await deleteDoc(doc(db,"global_posts",b.dataset.d))}catch(e){toast(errTxt(e))}});
+  }else{
+    L.className="chatbox";
+    L.innerHTML=chat.length?[...chat].reverse().map(m=>`<div class="cm${user&&m.uid===user.uid?" me":""}"><div class="l"><b>${esc(m.author)}</b> · ${esc(when(m.createdAt))}${user&&(m.uid===user.uid||can("posts"))?` <a href="#" data-d="${m.id}">borrar</a>`:""}</div><div class="pre">${esc(m.text)}</div></div>`).join(""):'<div class="empty">Nadie ha escrito todavía. Di hola 👋</div>';
+    L.querySelectorAll("[data-d]").forEach(a=>a.onclick=async e=>{e.preventDefault();try{await deleteDoc(doc(db,"global_chat",a.dataset.d))}catch(er){toast(errTxt(er))}});
+    L.scrollTop=L.scrollHeight;
+  }
+}
+
+function renderApk(){
+  const v=$("view");
+  const rows=apks.filter(a=>!q||(a.name+a.author+a.desc).toLowerCase().includes(q.toLowerCase()));
+  v.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar APK" value="${esc(q)}">${user?'<button class="pri" id="up">Subir APK</button>':'<button class="pri" id="inb3">Entrar para subir un APK</button>'}</div>
+  ${rows.length?`<div class="grid">${rows.map(a=>`<div class="card"><h3>${esc(a.name)}</h3><div class="l">${a.version?esc("v"+a.version)+" · ":""}por ${esc(a.author)}${a.size?" · "+fmtSize(a.size):""}</div>${a.desc?`<p>${esc(a.desc)}</p>`:""}<div class="links"><a href="${url(a.url)}" target="_blank" rel="noopener">Descargar</a><button class="sm" data-c="${a.id}">Copiar link</button>${user&&(a.uid===user.uid||can("apks"))?`<button class="sm dng" data-x="${a.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Todavía no hay APKs. Sube el primero.</div>'}`;
+  keepSearch(renderApk);
+  if(user)$("up").onclick=openApk;else $("inb3").onclick=openAuth;
+  v.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>copy(apks.find(x=>x.id===b.dataset.c).url));
+  v.querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{
+    const a=apks.find(x=>x.id===b.dataset.x);if(!confirm("¿Eliminar este APK?"))return;
+    try{await deleteDoc(doc(db,"apks",a.id));if(a.path)deleteObject(sref(storage,a.path)).catch(()=>{})}catch(e){toast(errTxt(e))}
+  });
+}
+const am2=m=>$("a_msg").textContent=m;
+function openApk(){
+  ["a_name","a_ver","a_desc","a_link","a_file"].forEach(i=>$(i).value="");
+  $("a_prog").value=0;$("a_pt").textContent="";am2("");$("apkOk").disabled=false;$("apkDlg").showModal();
+}
+$("apkNo").onclick=()=>$("apkDlg").close();
+$("apkOk").onclick=async()=>{
+  const name=$("a_name").value.trim(),version=$("a_ver").value.trim(),desc=$("a_desc").value.trim(),file=$("a_file").files[0],link=$("a_link").value.trim();
+  if(isBanned){am2("Un administrador te baneó de Global y APKs.");return}
+  if(!name){am2("Escribe el nombre del APK.");return}
+  if(link&&!/^https?:\/\//i.test(link)){am2("El link debe empezar con https://");return}
+  if(!file&&!link){am2("Elige un archivo o pega un link.");return}
+  let u=link,path="",size=0;
+  $("apkOk").disabled=true;am2("");
+  try{
+    if(file){
+      path=`apks/${user.uid}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,"_")}`;
+      const task=uploadBytesResumable(sref(storage,path),file);
+      await new Promise((res,rej)=>task.on("state_changed",sn=>{const pc=sn.bytesTransferred/sn.totalBytes*100;$("a_prog").value=pc;$("a_pt").textContent=Math.round(pc)+"%"},rej,res));
+      u=await getDownloadURL(task.snapshot.ref);size=file.size;
+    }
+    await addDoc(collection(db,"apks"),{uid:user.uid,author:aname(),name,version,desc,url:u,path,size,createdAt:serverTimestamp()});
+    $("apkDlg").close();toast("APK publicado");
+  }catch(e){
+    am2(String(e.code||"").startsWith("storage/")?"No se pudo subir el archivo. Firebase Storage necesita el plan Blaze y sus reglas publicadas. Mientras tanto, pega un link de descarga.":errTxt(e));
+  }finally{$("apkOk").disabled=false}
+};
+
+/* ---------- Terminal ---------- */
+let tmode="plat",tlines=[],tgd=null,tpend=null;
+const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const toks=l=>(l.match(/"[^"]*"|\S+/g)||[]).map(x=>x.replace(/^"|"$/g,""));
+function addLine(o,t,c){const d=document.createElement("div");if(c)d.className=c;d.textContent=t;o.append(d)}
+function print(t,c){tlines.push([t,c||""]);if(tlines.length>300)tlines.shift();const o=$("tout");if(o){addLine(o,t,c||"");o.scrollTop=o.scrollHeight}}
+const HELP_PLAT=`Modo plataforma (datos de tu GDPS dentro de GDPS MANAGER)
+mis · use <n> · usuarios · niveles · stats
+agregar <nombre> · ban <nombre> · unban <nombre>
+rol <nombre> <Jugador|Mod|Admin> · estrellas <nombre> <n>
+destacar <nivel> · quitar <nivel> · anuncio <texto>
+modo real · limpiar
+Si el nombre tiene espacios usa comillas: ban "Mi Amigo"`;
+const HELP_REAL=`Modo real (tu GDPS, mediante bridge.php)
+ping · stats · schema
+user <nombre|id> · find user <texto>
+level <id> · find level <texto>
+ban <usuario> · unban <usuario>
+rate <id> <1-10> [feature] [epic] · unrate <id>
+feature <id> · unfeature <id>
+modo plataforma · limpiar
+Los comandos que cambian datos piden confirmación.`;
+const BRIDGE_B64="PD9waHAKLyoKICogR0RQUyBNQU5BR0VSIMK3IGJyaWRnZS5waHAKICogU8O6YmVsbyBhIGxhIGNhcnBldGEgUkHDjVogZGUgdHUgR0RQUyAobGEgcXVlIGNvbnRpZW5lIGxhIGNhcnBldGEgImluY2wiKS4KICogTGEgY2xhdmUgKEJSSURHRV9LRVkpIHkgbGEgcMOhZ2luYSBwZXJtaXRpZGEgKEFMTE9XRURfT1JJR0lOKSBsYXMgcG9uZSBHRFBTIE1BTkFHRVIKICogYWwgZGVzY2FyZ2FyIGVzdGUgYXJjaGl2byBkZXNkZSBsYSBwZXN0YcOxYSBUZXJtaW5hbC4gTm8gY29tcGFydGFzIHR1IGNsYXZlLgogKiBIYXogdW5hIGNvcGlhIGRlIHR1IGJhc2UgZGUgZGF0b3MgZW4gcGhwTXlBZG1pbiAoRXhwb3J0YXIpIGFudGVzIGRlIHVzYXJsby4KICovCmNvbnN0IEJSSURHRV9LRVkgPSAnQ0FNQklBX0VTVEFfQ0xBVkVfTEFSR0EnOwpjb25zdCBBTExPV0VEX09SSUdJTiA9ICdodHRwczovL3plZXI4NjYuZ2l0aHViLmlvJzsKCmhlYWRlcignQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uOyBjaGFyc2V0PXV0Zi04Jyk7CiRvcmlnaW4gPSAkX1NFUlZFUlsnSFRUUF9PUklHSU4nXSA/PyAnJzsKaWYgKCRvcmlnaW4gPT09IEFMTE9XRURfT1JJR0lOKSB7CiAgICBoZWFkZXIoJ0FjY2Vzcy1Db250cm9sLUFsbG93LU9yaWdpbjogJyAuIEFMTE9XRURfT1JJR0lOKTsKICAgIGhlYWRlcignVmFyeTogT3JpZ2luJyk7CiAgICBoZWFkZXIoJ0FjY2Vzcy1Db250cm9sLUFsbG93LUhlYWRlcnM6IENvbnRlbnQtVHlwZSwgWC1LZXknKTsKICAgIGhlYWRlcignQWNjZXNzLUNvbnRyb2wtQWxsb3ctTWV0aG9kczogUE9TVCwgT1BUSU9OUycpOwp9CmlmICgoJF9TRVJWRVJbJ1JFUVVFU1RfTUVUSE9EJ10gPz8gJycpID09PSAnT1BUSU9OUycpIHsgaHR0cF9yZXNwb25zZV9jb2RlKDIwNCk7IGV4aXQ7IH0KCmZ1bmN0aW9uIG91dCgkb2ssICRtc2cpIHsKICAgIGVjaG8ganNvbl9lbmNvZGUoJG9rID8gWydvaycgPT4gdHJ1ZSwgJ291dCcgPT4gJG1zZ10gOiBbJ29rJyA9PiBmYWxzZSwgJ2VycicgPT4gJG1zZ10sIEpTT05fVU5FU0NBUEVEX1VOSUNPREUpOwogICAgZXhpdDsKfQoKaWYgKEJSSURHRV9LRVkgPT09ICdDQU1CSUFfRVNUQV9DTEFWRV9MQVJHQScgfHwgc3RybGVuKEJSSURHRV9LRVkpIDwgMTYpIHsKICAgIGh0dHBfcmVzcG9uc2VfY29kZSg1MDApOwogICAgb3V0KGZhbHNlLCAnQ2FtYmlhIEJSSURHRV9LRVkgZGVudHJvIGRlIGJyaWRnZS5waHAgKG3DrW5pbW8gMTYgY2FyYWN0ZXJlcykuJyk7Cn0KaWYgKCRvcmlnaW4gIT09IEFMTE9XRURfT1JJR0lOKSB7IGh0dHBfcmVzcG9uc2VfY29kZSg0MDMpOyBvdXQoZmFsc2UsICdPcmlnZW4gbm8gcGVybWl0aWRvLicpOyB9CmlmICgoJF9TRVJWRVJbJ1JFUVVFU1RfTUVUSE9EJ10gPz8gJycpICE9PSAnUE9TVCcpIHsgaHR0cF9yZXNwb25zZV9jb2RlKDQwNSk7IG91dChmYWxzZSwgJ1VzYSBQT1NULicpOyB9CmlmICghaGFzaF9lcXVhbHMoQlJJREdFX0tFWSwgJF9TRVJWRVJbJ0hUVFBfWF9LRVknXSA/PyAnJykpIHsgc2xlZXAoMSk7IGh0dHBfcmVzcG9uc2VfY29kZSg0MDEpOyBvdXQoZmFsc2UsICdDbGF2ZSBpbmNvcnJlY3RhLicpOyB9CgovKiAtLS0tIENvbmV4acOzbiBhIGxhIGJhc2UgZGUgZGF0b3MgZGVsIEdEUFMgLS0tLSAqLwpvYl9zdGFydCgpOwppZiAoZmlsZV9leGlzdHMoX19ESVJfXyAuICcvaW5jbC9saWIvY29ubmVjdGlvbi5waHAnKSkgeyBpbmNsdWRlIF9fRElSX18gLiAnL2luY2wvbGliL2Nvbm5lY3Rpb24ucGhwJzsgfQpvYl9lbmRfY2xlYW4oKTsKaWYgKCFpc3NldCgkZGIpIHx8ICEoJGRiIGluc3RhbmNlb2YgUERPKSkgewogICAgb3V0KGZhbHNlLCAnTm8gZW5jb250csOpIGxhIGNvbmV4acOzbiBhIGxhIGJhc2UgZGUgZGF0b3MuIFBvbiBicmlkZ2UucGhwIGVuIGxhIGNhcnBldGEgcmHDrXogZGUgdHUgR0RQUyAoZG9uZGUgZXN0w6EgbGEgY2FycGV0YSBpbmNsKS4nKTsKfQokZGItPnNldEF0dHJpYnV0ZShQRE86OkFUVFJfRVJSTU9ERSwgUERPOjpFUlJNT0RFX0VYQ0VQVElPTik7CgovKiAtLS0tIFV0aWxpZGFkZXMgLS0tLSAqLwpmdW5jdGlvbiBjb2xzKCRkYiwgJHRhYmxlKSB7CiAgICB0cnkgewogICAgICAgICRxID0gJGRiLT5xdWVyeSgnU0hPVyBDT0xVTU5TIEZST00gYCcgLiBzdHJfcmVwbGFjZSgnYCcsICcnLCAkdGFibGUpIC4gJ2AnKTsKICAgICAgICByZXR1cm4gYXJyYXlfY29sdW1uKCRxLT5mZXRjaEFsbChQRE86OkZFVENIX0FTU09DKSwgJ0ZpZWxkJyk7CiAgICB9IGNhdGNoIChFeGNlcHRpb24gJGUpIHsgcmV0dXJuIFtdOyB9Cn0KZnVuY3Rpb24gbmVlZCgkZGIsICR0YWJsZSwgJG5lZWQpIHsKICAgICRoYXZlID0gY29scygkZGIsICR0YWJsZSk7CiAgICBmb3JlYWNoICgkbmVlZCBhcyAkYykgewogICAgICAgIGlmICghaW5fYXJyYXkoJGMsICRoYXZlLCB0cnVlKSkgewogICAgICAgICAgICBvdXQoZmFsc2UsICJUdSBiYXNlIG5vIHRpZW5lIGxvIGVzcGVyYWRvIGVuICR0YWJsZSAoIiAuIGltcGxvZGUoJywgJywgJG5lZWQpIC4gIikuIEVzY3JpYmUgJ3NjaGVtYScgcGFyYSB2ZXIgdHUgZXN0cnVjdHVyYSByZWFsLiIpOwogICAgICAgIH0KICAgIH0KICAgIHJldHVybiAkaGF2ZTsKfQpmdW5jdGlvbiBmaW5kVXNlcigkZGIsICRxKSB7CiAgICAkcyA9ICRkYi0+cHJlcGFyZSgnU0VMRUNUICogRlJPTSB1c2VycyBXSEVSRSB1c2VyTmFtZSA9ID8gTElNSVQgMScpOwogICAgJHMtPmV4ZWN1dGUoWyRxXSk7CiAgICAkdSA9ICRzLT5mZXRjaChQRE86OkZFVENIX0FTU09DKTsKICAgIGlmICghJHUgJiYgY3R5cGVfZGlnaXQoJHEpKSB7CiAgICAgICAgJHMgPSAkZGItPnByZXBhcmUoJ1NFTEVDVCAqIEZST00gdXNlcnMgV0hFUkUgdXNlcklEID0gPyBMSU1JVCAxJyk7CiAgICAgICAgJHMtPmV4ZWN1dGUoWyRxXSk7CiAgICAgICAgJHUgPSAkcy0+ZmV0Y2goUERPOjpGRVRDSF9BU1NPQyk7CiAgICB9CiAgICByZXR1cm4gJHU7Cn0KZnVuY3Rpb24gcGljaygkcm93LCAka2V5cykgewogICAgJG8gPSBbXTsKICAgIGZvcmVhY2ggKCRrZXlzIGFzICRrKSB7IGlmIChhcnJheV9rZXlfZXhpc3RzKCRrLCAkcm93KSkgJG9bXSA9ICIkazogIiAuICRyb3dbJGtdOyB9CiAgICByZXR1cm4gaW1wbG9kZSgiXG4iLCAkbyk7Cn0KCi8qIC0tLS0gQ29tYW5kbyAtLS0tICovCiRpbiA9IGpzb25fZGVjb2RlKGZpbGVfZ2V0X2NvbnRlbnRzKCdwaHA6Ly9pbnB1dCcpLCB0cnVlKTsKJGxpbmUgPSB0cmltKChzdHJpbmcpKCRpblsnY21kJ10gPz8gJycpKTsKaWYgKCRsaW5lID09PSAnJykgb3V0KGZhbHNlLCAnQ29tYW5kbyB2YWPDrW8uJyk7CnByZWdfbWF0Y2hfYWxsKCcvIihbXiJdKikifChcUyspLycsICRsaW5lLCAkbSwgUFJFR19TRVRfT1JERVIpOwokYSA9IFtdOwpmb3JlYWNoICgkbSBhcyAkeCkgeyAkYVtdID0gKGlzc2V0KCR4WzJdKSAmJiAkeFsyXSAhPT0gJycpID8gJHhbMl0gOiAkeFsxXTsgfQokYyA9IHN0cnRvbG93ZXIoJGFbMF0gPz8gJycpOwoKdHJ5IHsKICAgIHN3aXRjaCAoJGMpIHsKICAgICAgICBjYXNlICdwaW5nJzoKICAgICAgICAgICAgb3V0KHRydWUsICdicmlkZ2UgT0sgwrcgUEhQICcgLiBQSFBfVkVSU0lPTik7CgogICAgICAgIGNhc2UgJ3NjaGVtYSc6CiAgICAgICAgICAgICRyID0gW107CiAgICAgICAgICAgIGZvcmVhY2ggKFsndXNlcnMnLCAnbGV2ZWxzJywgJ2FjY291bnRzJ10gYXMgJHQpIHsKICAgICAgICAgICAgICAgICRjcyA9IGNvbHMoJGRiLCAkdCk7CiAgICAgICAgICAgICAgICAkcltdID0gIiR0OiAiIC4gKCRjcyA/IGltcGxvZGUoJywgJywgJGNzKSA6ICcobm8gZXhpc3RlKScpOwogICAgICAgICAgICB9CiAgICAgICAgICAgIG91dCh0cnVlLCBpbXBsb2RlKCJcblxuIiwgJHIpKTsKCiAgICAgICAgY2FzZSAnc3RhdHMnOgogICAgICAgICAgICAkciA9IFtdOwogICAgICAgICAgICBmb3JlYWNoIChbJ3VzZXJzJyA9PiAndXN1YXJpb3MnLCAnbGV2ZWxzJyA9PiAnbml2ZWxlcycsICdhY2NvdW50cycgPT4gJ2N1ZW50YXMnXSBhcyAkdCA9PiAkbikgewogICAgICAgICAgICAgICAgdHJ5IHsgJHJbXSA9ICIkbjogIiAuICRkYi0+cXVlcnkoIlNFTEVDVCBDT1VOVCgqKSBGUk9NIGAkdGAiKS0+ZmV0Y2hDb2x1bW4oKTsgfSBjYXRjaCAoRXhjZXB0aW9uICRlKSB7fQogICAgICAgICAgICB9CiAgICAgICAgICAgIGlmIChpbl9hcnJheSgnaXNCYW5uZWQnLCBjb2xzKCRkYiwgJ3VzZXJzJyksIHRydWUpKSB7CiAgICAgICAgICAgICAgICAkcltdID0gJ2JhbmVhZG9zOiAnIC4gJGRiLT5xdWVyeSgnU0VMRUNUIENPVU5UKCopIEZST00gdXNlcnMgV0hFUkUgaXNCYW5uZWQgPSAxJyktPmZldGNoQ29sdW1uKCk7CiAgICAgICAgICAgIH0KICAgICAgICAgICAgaWYgKGluX2FycmF5KCdzdGFyU3RhcnMnLCBjb2xzKCRkYiwgJ2xldmVscycpLCB0cnVlKSkgewogICAgICAgICAgICAgICAgJHJbXSA9ICduaXZlbGVzIGNvbiBlc3RyZWxsYXM6ICcgLiAkZGItPnF1ZXJ5KCdTRUxFQ1QgQ09VTlQoKikgRlJPTSBsZXZlbHMgV0hFUkUgc3RhclN0YXJzID4gMCcpLT5mZXRjaENvbHVtbigpOwogICAgICAgICAgICB9CiAgICAgICAgICAgIG91dCh0cnVlLCBpbXBsb2RlKCJcbiIsICRyKSk7CgogICAgICAgIGNhc2UgJ3VzZXInOgogICAgICAgICAgICBuZWVkKCRkYiwgJ3VzZXJzJywgWyd1c2VySUQnLCAndXNlck5hbWUnXSk7CiAgICAgICAgICAgIGlmICghaXNzZXQoJGFbMV0pKSBvdXQoZmFsc2UsICdVc286IHVzZXIgPG5vbWJyZXxpZD4nKTsKICAgICAgICAgICAgJHUgPSBmaW5kVXNlcigkZGIsICRhWzFdKTsKICAgICAgICAgICAgaWYgKCEkdSkgb3V0KGZhbHNlLCAnTm8gZW5jb250csOpIGVzZSB1c3VhcmlvLicpOwogICAgICAgICAgICBvdXQodHJ1ZSwgcGljaygkdSwgWyd1c2VySUQnLCAndXNlck5hbWUnLCAnaXNCYW5uZWQnLCAnc3RhcnMnLCAnbW9vbnMnLCAnZGVtb25zJywgJ2NvaW5zJywgJ3VzZXJDb2lucycsICdjcmVhdG9yUG9pbnRzJywgJ2V4dElEJ10pKTsKCiAgICAgICAgY2FzZSAnYmFuJzoKICAgICAgICBjYXNlICd1bmJhbic6CiAgICAgICAgICAgIG5lZWQoJGRiLCAndXNlcnMnLCBbJ3VzZXJJRCcsICd1c2VyTmFtZScsICdpc0Jhbm5lZCddKTsKICAgICAgICAgICAgaWYgKCFpc3NldCgkYVsxXSkpIG91dChmYWxzZSwgIlVzbzogJGMgPHVzdWFyaW8+Iik7CiAgICAgICAgICAgICR1ID0gZmluZFVzZXIoJGRiLCAkYVsxXSk7CiAgICAgICAgICAgIGlmICghJHUpIG91dChmYWxzZSwgJ05vIGVuY29udHLDqSBlc2UgdXN1YXJpby4nKTsKICAgICAgICAgICAgJGRiLT5wcmVwYXJlKCdVUERBVEUgdXNlcnMgU0VUIGlzQmFubmVkID0gPyBXSEVSRSB1c2VySUQgPSA/JyktPmV4ZWN1dGUoWyRjID09PSAnYmFuJyA/IDEgOiAwLCAkdVsndXNlcklEJ11dKTsKICAgICAgICAgICAgb3V0KHRydWUsICgkYyA9PT0gJ2JhbicgPyAnQmFuZWFkbzogJyA6ICdEZXNiYW5lYWRvOiAnKSAuICR1Wyd1c2VyTmFtZSddIC4gJyAoaWQgJyAuICR1Wyd1c2VySUQnXSAuICcpJyk7CgogICAgICAgIGNhc2UgJ2xldmVsJzoKICAgICAgICAgICAgbmVlZCgkZGIsICdsZXZlbHMnLCBbJ2xldmVsSUQnLCAnbGV2ZWxOYW1lJ10pOwogICAgICAgICAgICBpZiAoIWlzc2V0KCRhWzFdKSB8fCAhY3R5cGVfZGlnaXQoJGFbMV0pKSBvdXQoZmFsc2UsICdVc286IGxldmVsIDxpZD4nKTsKICAgICAgICAgICAgJHMgPSAkZGItPnByZXBhcmUoJ1NFTEVDVCAqIEZST00gbGV2ZWxzIFdIRVJFIGxldmVsSUQgPSA/IExJTUlUIDEnKTsKICAgICAgICAgICAgJHMtPmV4ZWN1dGUoWyRhWzFdXSk7CiAgICAgICAgICAgICRsID0gJHMtPmZldGNoKFBETzo6RkVUQ0hfQVNTT0MpOwogICAgICAgICAgICBpZiAoISRsKSBvdXQoZmFsc2UsICdObyBleGlzdGUgZXNlIG5pdmVsLicpOwogICAgICAgICAgICBvdXQodHJ1ZSwgcGljaygkbCwgWydsZXZlbElEJywgJ2xldmVsTmFtZScsICd1c2VyTmFtZScsICdzdGFyU3RhcnMnLCAnc3RhckRpZmZpY3VsdHknLCAnc3RhckZlYXR1cmVkJywgJ3N0YXJFcGljJywgJ2Rvd25sb2FkcycsICdsaWtlcyddKSk7CgogICAgICAgIGNhc2UgJ2ZpbmQnOgogICAgICAgICAgICAkd2hhdCA9IHN0cnRvbG93ZXIoJGFbMV0gPz8gJycpOwogICAgICAgICAgICAkcSA9ICclJyAuICgkYVsyXSA/PyAnJykgLiAnJSc7CiAgICAgICAgICAgIGlmICghaXNzZXQoJGFbMl0pKSBvdXQoZmFsc2UsICdVc286IGZpbmQgdXNlciA8dGV4dG8+IHwgZmluZCBsZXZlbCA8dGV4dG8+Jyk7CiAgICAgICAgICAgIGlmICgkd2hhdCA9PT0gJ3VzZXInKSB7CiAgICAgICAgICAgICAgICBuZWVkKCRkYiwgJ3VzZXJzJywgWyd1c2VySUQnLCAndXNlck5hbWUnXSk7CiAgICAgICAgICAgICAgICAkcyA9ICRkYi0+cHJlcGFyZSgnU0VMRUNUIHVzZXJJRCwgdXNlck5hbWUgRlJPTSB1c2VycyBXSEVSRSB1c2VyTmFtZSBMSUtFID8gTElNSVQgMTAnKTsKICAgICAgICAgICAgICAgICRzLT5leGVjdXRlKFskcV0pOwogICAgICAgICAgICAgICAgJHJvd3MgPSAkcy0+ZmV0Y2hBbGwoUERPOjpGRVRDSF9BU1NPQyk7CiAgICAgICAgICAgICAgICBvdXQodHJ1ZSwgJHJvd3MgPyBpbXBsb2RlKCJcbiIsIGFycmF5X21hcChmdW5jdGlvbiAoJHIpIHsgcmV0dXJuICRyWyd1c2VySUQnXSAuICcgwrcgJyAuICRyWyd1c2VyTmFtZSddOyB9LCAkcm93cykpIDogJ1NpbiByZXN1bHRhZG9zLicpOwogICAgICAgICAgICB9IGVsc2VpZiAoJHdoYXQgPT09ICdsZXZlbCcpIHsKICAgICAgICAgICAgICAgIG5lZWQoJGRiLCAnbGV2ZWxzJywgWydsZXZlbElEJywgJ2xldmVsTmFtZSddKTsKICAgICAgICAgICAgICAgICRzID0gJGRiLT5wcmVwYXJlKCdTRUxFQ1QgbGV2ZWxJRCwgbGV2ZWxOYW1lIEZST00gbGV2ZWxzIFdIRVJFIGxldmVsTmFtZSBMSUtFID8gTElNSVQgMTAnKTsKICAgICAgICAgICAgICAgICRzLT5leGVjdXRlKFskcV0pOwogICAgICAgICAgICAgICAgJHJvd3MgPSAkcy0+ZmV0Y2hBbGwoUERPOjpGRVRDSF9BU1NPQyk7CiAgICAgICAgICAgICAgICBvdXQodHJ1ZSwgJHJvd3MgPyBpbXBsb2RlKCJcbiIsIGFycmF5X21hcChmdW5jdGlvbiAoJHIpIHsgcmV0dXJuICRyWydsZXZlbElEJ10gLiAnIMK3ICcgLiAkclsnbGV2ZWxOYW1lJ107IH0sICRyb3dzKSkgOiAnU2luIHJlc3VsdGFkb3MuJyk7CiAgICAgICAgICAgIH0KICAgICAgICAgICAgb3V0KGZhbHNlLCAnVXNvOiBmaW5kIHVzZXIgPHRleHRvPiB8IGZpbmQgbGV2ZWwgPHRleHRvPicpOwoKICAgICAgICBjYXNlICdyYXRlJzoKICAgICAgICAgICAgJGhhdmUgPSBuZWVkKCRkYiwgJ2xldmVscycsIFsnbGV2ZWxJRCcsICdzdGFyU3RhcnMnLCAnc3RhckRpZmZpY3VsdHknLCAnc3RhckRlbW9uJywgJ3N0YXJBdXRvJywgJ3N0YXJGZWF0dXJlZCddKTsKICAgICAgICAgICAgaWYgKCFpc3NldCgkYVsxXSwgJGFbMl0pIHx8ICFjdHlwZV9kaWdpdCgkYVsxXSkgfHwgIWN0eXBlX2RpZ2l0KCRhWzJdKSB8fCAkYVsyXSA8IDEgfHwgJGFbMl0gPiAxMCkgb3V0KGZhbHNlLCAnVXNvOiByYXRlIDxpZD4gPDEtMTA+IFtmZWF0dXJlXSBbZXBpY10nKTsKICAgICAgICAgICAgJG9wdHMgPSBhcnJheV9tYXAoJ3N0cnRvbG93ZXInLCBhcnJheV9zbGljZSgkYSwgMykpOwogICAgICAgICAgICAkc3RhcnMgPSAoaW50KSRhWzJdOwogICAgICAgICAgICAvLyBlc3RyZWxsYXMgPT4gW2RpZmljdWx0YWQsIGRlbW9uLCBhdXRvXQogICAgICAgICAgICAkbWFwID0gWzEgPT4gWzUwLCAwLCAxXSwgMiA9PiBbMTAsIDAsIDBdLCAzID0+IFsyMCwgMCwgMF0sIDQgPT4gWzMwLCAwLCAwXSwgNSA9PiBbMzAsIDAsIDBdLCA2ID0+IFs0MCwgMCwgMF0sIDcgPT4gWzQwLCAwLCAwXSwgOCA9PiBbNTAsIDAsIDBdLCA5ID0+IFs1MCwgMCwgMF0sIDEwID0+IFs1MCwgMSwgMF1dOwogICAgICAgICAgICBsaXN0KCRkaWZmLCAkZGVtb24sICRhdXRvKSA9ICRtYXBbJHN0YXJzXTsKICAgICAgICAgICAgJGZlYXQgPSAwOwogICAgICAgICAgICBpZiAoaW5fYXJyYXkoJ2ZlYXR1cmUnLCAkb3B0cywgdHJ1ZSkpIHsKICAgICAgICAgICAgICAgICRmZWF0ID0gKGludCkkZGItPnF1ZXJ5KCdTRUxFQ1QgQ09BTEVTQ0UoTUFYKHN0YXJGZWF0dXJlZCksIDApICsgMSBGUk9NIGxldmVscycpLT5mZXRjaENvbHVtbigpOwogICAgICAgICAgICB9CiAgICAgICAgICAgICRzZXQgPSAnc3RhclN0YXJzID0gPywgc3RhckRpZmZpY3VsdHkgPSA/LCBzdGFyRGVtb24gPSA/LCBzdGFyQXV0byA9ID8sIHN0YXJGZWF0dXJlZCA9ID8nOwogICAgICAgICAgICAkcGFyID0gWyRzdGFycywgJGRpZmYsICRkZW1vbiwgJGF1dG8sICRmZWF0XTsKICAgICAgICAgICAgaWYgKGluX2FycmF5KCdlcGljJywgJG9wdHMsIHRydWUpKSB7CiAgICAgICAgICAgICAgICBpZiAoIWluX2FycmF5KCdzdGFyRXBpYycsICRoYXZlLCB0cnVlKSkgb3V0KGZhbHNlLCAiVHUgYmFzZSBubyB0aWVuZSBsYSBjb2x1bW5hIHN0YXJFcGljLiIpOwogICAgICAgICAgICAgICAgJHNldCAuPSAnLCBzdGFyRXBpYyA9ID8nOyAkcGFyW10gPSAxOwogICAgICAgICAgICB9CiAgICAgICAgICAgIGlmIChpbl9hcnJheSgncmF0ZURhdGUnLCAkaGF2ZSwgdHJ1ZSkpIHsgJHNldCAuPSAnLCByYXRlRGF0ZSA9ID8nOyAkcGFyW10gPSB0aW1lKCk7IH0KICAgICAgICAgICAgJHBhcltdID0gKGludCkkYVsxXTsKICAgICAgICAgICAgJHN0ID0gJGRiLT5wcmVwYXJlKCJVUERBVEUgbGV2ZWxzIFNFVCAkc2V0IFdIRVJFIGxldmVsSUQgPSA/Iik7CiAgICAgICAgICAgICRzdC0+ZXhlY3V0ZSgkcGFyKTsKICAgICAgICAgICAgb3V0KCRzdC0+cm93Q291bnQoKSA/ICJOaXZlbCB7JGFbMV19IGNhbGlmaWNhZG8gY29uICRzdGFycyBlc3RyZWxsYXMuIiA6ICdObyBzZSBtb2RpZmljw7MgbmFkYSAowr9leGlzdGUgZXNlIG5pdmVsPykuJyk7CgogICAgICAgIGNhc2UgJ3VucmF0ZSc6CiAgICAgICAgICAgICRoYXZlID0gbmVlZCgkZGIsICdsZXZlbHMnLCBbJ2xldmVsSUQnLCAnc3RhclN0YXJzJywgJ3N0YXJEaWZmaWN1bHR5JywgJ3N0YXJEZW1vbicsICdzdGFyQXV0bycsICdzdGFyRmVhdHVyZWQnXSk7CiAgICAgICAgICAgIGlmICghaXNzZXQoJGFbMV0pIHx8ICFjdHlwZV9kaWdpdCgkYVsxXSkpIG91dChmYWxzZSwgJ1VzbzogdW5yYXRlIDxpZD4nKTsKICAgICAgICAgICAgJHNldCA9ICdzdGFyU3RhcnMgPSAwLCBzdGFyRGlmZmljdWx0eSA9IDAsIHN0YXJEZW1vbiA9IDAsIHN0YXJBdXRvID0gMCwgc3RhckZlYXR1cmVkID0gMCc7CiAgICAgICAgICAgIGlmIChpbl9hcnJheSgnc3RhckVwaWMnLCAkaGF2ZSwgdHJ1ZSkpICRzZXQgLj0gJywgc3RhckVwaWMgPSAwJzsKICAgICAgICAgICAgJHN0ID0gJGRiLT5wcmVwYXJlKCJVUERBVEUgbGV2ZWxzIFNFVCAkc2V0IFdIRVJFIGxldmVsSUQgPSA/Iik7CiAgICAgICAgICAgICRzdC0+ZXhlY3V0ZShbKGludCkkYVsxXV0pOwogICAgICAgICAgICBvdXQoJHN0LT5yb3dDb3VudCgpID8gIk5pdmVsIHskYVsxXX0gc2luIGNhbGlmaWNhY2nDs24uIiA6ICdObyBzZSBtb2RpZmljw7MgbmFkYSAowr9leGlzdGUgZXNlIG5pdmVsPykuJyk7CgogICAgICAgIGNhc2UgJ2ZlYXR1cmUnOgogICAgICAgIGNhc2UgJ3VuZmVhdHVyZSc6CiAgICAgICAgICAgIG5lZWQoJGRiLCAnbGV2ZWxzJywgWydsZXZlbElEJywgJ3N0YXJGZWF0dXJlZCddKTsKICAgICAgICAgICAgaWYgKCFpc3NldCgkYVsxXSkgfHwgIWN0eXBlX2RpZ2l0KCRhWzFdKSkgb3V0KGZhbHNlLCAiVXNvOiAkYyA8aWQ+Iik7CiAgICAgICAgICAgICR2ID0gMDsKICAgICAgICAgICAgaWYgKCRjID09PSAnZmVhdHVyZScpICR2ID0gKGludCkkZGItPnF1ZXJ5KCdTRUxFQ1QgQ09BTEVTQ0UoTUFYKHN0YXJGZWF0dXJlZCksIDApICsgMSBGUk9NIGxldmVscycpLT5mZXRjaENvbHVtbigpOwogICAgICAgICAgICAkc3QgPSAkZGItPnByZXBhcmUoJ1VQREFURSBsZXZlbHMgU0VUIHN0YXJGZWF0dXJlZCA9ID8gV0hFUkUgbGV2ZWxJRCA9ID8nKTsKICAgICAgICAgICAgJHN0LT5leGVjdXRlKFskdiwgKGludCkkYVsxXV0pOwogICAgICAgICAgICBvdXQoJHN0LT5yb3dDb3VudCgpID8gKCRjID09PSAnZmVhdHVyZScgPyAiTml2ZWwgeyRhWzFdfSBkZXN0YWNhZG8uIiA6ICJOaXZlbCB7JGFbMV19IHlhIG5vIGVzdMOhIGRlc3RhY2Fkby4iKSA6ICdObyBzZSBtb2RpZmljw7MgbmFkYSAowr9leGlzdGUgZXNlIG5pdmVsPykuJyk7CgogICAgICAgIGRlZmF1bHQ6CiAgICAgICAgICAgIG91dChmYWxzZSwgIkNvbWFuZG8gZGVzY29ub2NpZG86ICRjLiBFc2NyaWJlICdheXVkYScuIik7CiAgICB9Cn0gY2F0Y2ggKEV4Y2VwdGlvbiAkZSkgewogICAgb3V0KGZhbHNlLCAnRXJyb3IgZGUgYmFzZSBkZSBkYXRvczogJyAuICRlLT5nZXRNZXNzYWdlKCkpOwp9Cg==";
+const MUT=["ban","unban","rate","unrate","feature","unfeature"];
+function setMode(m){tmode=m;tpend=null;print(m==="real"?"Modo REAL: los comandos cambian tu GDPS de verdad. Configura la conexión y prueba con ping.":"Modo plataforma: los comandos cambian solo tus datos en GDPS MANAGER.");renderTerminal()}
+function renderTerminal(){
+  const v=$("view");
+  if(!$("tshell")){
+    v.innerHTML=`<div id="tshell">
+    <div class="chips"><button data-m="plat">Plataforma</button><button data-m="real">Mi GDPS (real)</button><button data-q="ayuda">ayuda</button><button data-q="stats">stats</button><button data-q="limpiar">limpiar</button></div>
+    <details style="margin-bottom:.8rem"><summary class="l" style="cursor:pointer">Cómo conectar mi GDPS (modo real)</summary>
+      <ol class="note" style="padding-left:1.2rem">
+        <li>Toca <b>Descargar bridge.php</b>. Ya trae tu clave y esta página como única permitida.</li>
+        <li>Súbelo con el administrador de archivos de tu hosting a la carpeta raíz de tu GDPS (donde está la carpeta <b>incl</b>).</li>
+        <li>Abajo, en «Configurar conexión», escribe la URL: <b>https://tu-gdps.com/bridge.php</b> y toca Guardar.</li>
+        <li>Toca <b>Mi GDPS (real)</b> y escribe <b>ping</b>. Luego <b>schema</b> para ver que tu base coincide.</li>
+        <li>Antes de usar comandos que modifican datos, exporta una copia de tu base en phpMyAdmin.</li>
+      </ol>
+      <p class="note">Sirve para GDPS basados en Cvolton. Si descargas el archivo otra vez se reutiliza la misma clave de este dispositivo.</p>
+      <div class="row" style="margin-top:0"><button class="pri" id="t_dl">Descargar bridge.php</button></div></details>
+    <details style="margin-bottom:.8rem"><summary class="l" style="cursor:pointer">Configurar conexión con mi GDPS</summary>
+      <label for="t_url">URL de bridge.php</label><input id="t_url" placeholder="https://tu-gdps.com/bridge.php">
+      <label for="t_key">Clave secreta</label><input id="t_key" type="password" autocomplete="off">
+      <div class="row"><button class="pri" id="t_save">Guardar en este dispositivo</button></div></details>
+    <div class="term" id="tout"></div>
+    <div class="tin"><input id="tin" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="pri" id="tgo">Enviar</button></div></div>`;
+    $("t_url").value=lsGet("gm_url");$("t_key").value=lsGet("gm_key");
+    $("t_save").onclick=()=>{const u=$("t_url").value.trim();if(u&&!/^https:\/\//i.test(u)){toast("La URL debe empezar con https://");return}lsSet("gm_url",u);lsSet("gm_key",$("t_key").value.trim());toast("Guardado en este dispositivo")};
+    $("t_dl").onclick=()=>{
+      let key=lsGet("gm_key");
+      if(key.length<16||/[^\w\-]/.test(key)){const r=new Uint8Array(24);crypto.getRandomValues(r);key=Array.from(r,x=>x.toString(16).padStart(2,"0")).join("");lsSet("gm_key",key);$("t_key").value=key}
+      let src=new TextDecoder().decode(Uint8Array.from(atob(BRIDGE_B64),c=>c.charCodeAt(0)));
+      src=src.replace("const BRIDGE_KEY = 'CAMBIA_ESTA_CLAVE_LARGA';","const BRIDGE_KEY = '"+key+"';").replace("const ALLOWED_ORIGIN = 'https://zeer866.github.io';","const ALLOWED_ORIGIN = '"+location.origin+"';");
+      const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([src],{type:"text/x-php"}));a.download="bridge.php";document.body.append(a);a.click();a.remove();
+      toast("bridge.php descargado con tu clave");
+    };
+    v.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+    v.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>runCmd(b.dataset.q));
+    const send=()=>{const i=$("tin"),l=i.value;i.value="";runCmd(l)};
+    $("tgo").onclick=send;$("tin").onkeydown=e=>{if(e.key==="Enter")send()};
+    const o=$("tout");
+    if(!tlines.length)print("GDPS MANAGER Terminal · escribe ayuda para ver los comandos.");
+    else tlines.forEach(([t,c])=>addLine(o,t,c));
+    o.scrollTop=o.scrollHeight;
+  }
+  v.querySelectorAll("[data-m]").forEach(b=>b.classList.toggle("on",b.dataset.m===tmode));
+  $("tin").placeholder=tmode==="real"?"[real] escribe un comando":"[plataforma] escribe un comando";
+}
+async function runCmd(line){
+  line=(line||"").trim();if(!line)return;
+  print("> "+line,"in");
+  if(tpend){const p=tpend;tpend=null;if(/^(s|si|sí|y|yes)$/i.test(line))await real(p);else print("Cancelado.");return}
+  const [c0,...a]=toks(line),c=(c0||"").toLowerCase();
+  if(c==="limpiar"||c==="clear"){tlines=[];const o=$("tout");if(o)o.innerHTML="";return}
+  if(c==="ayuda"||c==="help"){print(tmode==="real"?HELP_REAL:HELP_PLAT);return}
+  if(c==="modo"){const m=(a[0]||"").toLowerCase();if(m==="real")setMode("real");else if(m==="plataforma")setMode("plat");else print("Uso: modo real | modo plataforma","err");return}
+  try{
+    if(tmode==="real"){
+      if(MUT.includes(c)){tpend=line;print("⚠ Esto cambia tu GDPS real. Escribe s para confirmar, o cualquier otra cosa para cancelar.","err");return}
+      await real(line);
+    }else await plat(c,a,line);
+  }catch(e){print(errTxt(e),"err")}
+}
+async function real(line){
+  const url=lsGet("gm_url"),key=lsGet("gm_key");
+  if(!url||!key){print("Falta configurar la URL y la clave. Abre «Configurar conexión con mi GDPS».","err");return}
+  if(!/^https:\/\//i.test(url)){print("La URL debe empezar con https://","err");return}
+  try{
+    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-Key":key},body:JSON.stringify({cmd:line})});
+    const j=await r.json();
+    print(j.ok?j.out:"Error: "+j.err,j.ok?"":"err");
+  }catch(e){print("No se pudo conectar. Revisa que la URL sea correcta, que bridge.php esté subido y que tu GDPS use https. ("+e.message+")","err")}
+}
+function pick(list,name){
+  const n=String(name||"").toLowerCase();
+  const ex=list.filter(x=>String(x.name).toLowerCase()===n);if(ex.length===1)return ex[0];
+  const p=list.filter(x=>String(x.name).toLowerCase().includes(n));
+  return p.length===1?p[0]:(p.length?"amb":null);
+}
+async function plat(c,a,line){
+  if(c==="mis"){print(all.length?all.map((g,i)=>`${i+1}. ${g.name}${g.id===tgd?"  ← en uso":""}`).join("\n"):"No tienes GDPS registrados. Registra uno en Mis GDPS.");return}
+  if(c==="use"){
+    if(!a[0]){print("Uso: use <número o nombre>","err");return}
+    const g=all[Number(a[0])-1]||all.find(x=>x.name.toLowerCase()===a.join(" ").toLowerCase());
+    if(!g){print("No encontré ese GDPS. Escribe mis para verlos.","err");return}
+    tgd=g.id;print("Usando: "+g.name);return;
+  }
+  if(!all.some(g=>g.id===tgd))tgd=all.length===1?all[0].id:null;
+  if(!tgd){print(all.length?"Primero elige un GDPS: escribe mis y luego use <n>.":"No tienes GDPS registrados. Registra uno en Mis GDPS.","err");return}
+  const load=async n=>(await getDocs(collection(db,"gdps",tgd,n))).docs.map(d=>({id:d.id,...d.data()}));
+  const upd=async(n,name,patch,msg)=>{
+    if(!name){print("Falta el nombre.","err");return}
+    const m=pick(await load(n),name);
+    if(!m){print("No encontré «"+name+"».","err");return}
+    if(m==="amb"){print("Hay varios que coinciden con «"+name+"». Sé más específico.","err");return}
+    await updateDoc(doc(db,"gdps",tgd,n,m.id),patch);print(msg(m));
+  };
+  if(c==="usuarios"){const l=await load("members");print(l.length?l.map(u=>`${u.name} · ${u.role} · ⭐${u.stars||0}${u.banned?" · BANEADO":""}`).join("\n"):"Aún no hay usuarios.");return}
+  if(c==="niveles"){const l=await load("levels");print(l.length?l.map(x=>`${x.name} · ${x.author} · ${x.difficulty}${x.featured?" · DESTACADO":""}`).join("\n"):"Aún no hay niveles.");return}
+  if(c==="stats"){const u=await load("members"),l=await load("levels"),an=await load("announcements");print(`usuarios: ${u.length} (baneados: ${u.filter(x=>x.banned).length})\nniveles: ${l.length} (destacados: ${l.filter(x=>x.featured).length})\nanuncios: ${an.length}`);return}
+  if(c==="agregar"){const n=a.join(" ");if(!n){print("Uso: agregar <nombre>","err");return}await addDoc(collection(db,"gdps",tgd,"members"),{name:n,role:"Jugador",stars:0,banned:false,createdAt:serverTimestamp()});print("Usuario agregado: "+n);return}
+  if(c==="ban"||c==="unban"){await upd("members",a.join(" "),{banned:c==="ban"},m=>(c==="ban"?"Baneado: ":"Desbaneado: ")+m.name);return}
+  if(c==="rol"){
+    const r={jugador:"Jugador",mod:"Mod",admin:"Admin"}[(a[a.length-1]||"").toLowerCase()];
+    if(a.length<2||!r){print("Uso: rol <nombre> <Jugador|Mod|Admin>","err");return}
+    await upd("members",a.slice(0,-1).join(" "),{role:r},m=>`${m.name} ahora es ${r}`);return;
+  }
+  if(c==="estrellas"){
+    const n=Number(a[a.length-1]);
+    if(a.length<2||Number.isNaN(n)){print("Uso: estrellas <nombre> <n>","err");return}
+    await upd("members",a.slice(0,-1).join(" "),{stars:n},m=>`${m.name} tiene ${n} estrellas`);return;
+  }
+  if(c==="destacar"||c==="quitar"){await upd("levels",a.join(" "),{featured:c==="destacar"},m=>(c==="destacar"?"Destacado: ":"Quitado de destacados: ")+m.name);return}
+  if(c==="anuncio"){
+    const t=line.replace(/^\S+\s*/,"").trim();
+    if(!t){print("Uso: anuncio <texto>","err");return}
+    await addDoc(collection(db,"gdps",tgd,"announcements"),{title:t.slice(0,60),body:t,createdAt:serverTimestamp()});print("Anuncio publicado.");return;
+  }
+  print("Comando desconocido: "+c+". Escribe ayuda.","err");
+}
+
+/* ---------- Administración ---------- */
+let myAdmin=null,setupExists=true,isBanned=false,adUnsubs=[],userUnsubs=[],asub="resumen";
+let adm={profiles:[],admins:[],bans:[],gdpsAll:[]};
+const can=p=>!!myAdmin&&(myAdmin.role==="owner"||(myAdmin.perms||{})[p]===true);
+const PN={posts:"Global",apks:"APKs",gdps:"GDPS Store",admins:"Admins"};
+function stopAdmin(){adUnsubs.forEach(f=>f());adUnsubs=[];userUnsubs.forEach(f=>f());userUnsubs=[];myAdmin=null;setupExists=true;isBanned=false;adm={profiles:[],admins:[],bans:[],gdpsAll:[]}}
+function startUser(u){
+  setDoc(doc(db,"profiles",u.uid),{email:u.email,name:(u.email||"").split("@")[0],lastSeen:serverTimestamp()},{merge:true}).catch(()=>{});
+  userUnsubs.push(onSnapshot(doc(db,"config","setup"),s=>{setupExists=s.exists();render()},()=>{}));
+  userUnsubs.push(onSnapshot(doc(db,"bans",u.uid),s=>{isBanned=s.exists();render()},()=>{}));
+  userUnsubs.push(onSnapshot(doc(db,"admins",u.uid),s=>{
+    const was=!!myAdmin;myAdmin=s.exists()?s.data():null;
+    if(myAdmin&&!was)startAdmin();
+    if(!myAdmin&&was){adUnsubs.forEach(f=>f());adUnsubs=[]}
+    render()},()=>{}));
+}
+function startAdmin(){
+  const sub=(c,k)=>adUnsubs.push(onSnapshot(collection(db,c),s=>{adm[k]=mapDocs(s);if(view==="admin")render()},e=>toast(errTxt(e))));
+  sub("profiles","profiles");sub("admins","admins");sub("bans","bans");sub("gdps","gdpsAll");
+}
+function openPerms(title,perms,onSave){
+  $("pT").textContent=title;
+  ["posts","apks","gdps","admins"].forEach(k=>$("p_"+k).checked=!!perms[k]);
+  $("permDlg").showModal();$("pNo").onclick=()=>$("permDlg").close();
+  $("pOk").onclick=async()=>{const o={};["posts","apks","gdps","admins"].forEach(k=>o[k]=$("p_"+k).checked);
+    try{await onSave(o);$("permDlg").close();toast("Guardado")}catch(e){toast(errTxt(e))}};
+}
+function renderAdmin(){
+  const v=$("view");
+  if(!user){view="dir";render();return}
+  if(!myAdmin){
+    if(setupExists){view="dir";render();return}
+    v.innerHTML='<div class="card" style="max-width:520px"><h3>Aún no hay administrador</h3><p>Nadie ha reclamado el panel. La primera cuenta que lo reclame será el <b>dueño</b>: tiene todos los permisos y no se le puede quitar. Hazlo solo si eres el dueño de la plataforma.</p><div class="row"><button class="pri" id="claim">Ser el dueño</button></div></div>';
+    $("claim").onclick=async()=>{
+      try{const b=writeBatch(db);
+        b.set(doc(db,"admins",user.uid),{email:user.email,role:"owner",perms:{posts:true,apks:true,gdps:true,admins:true},createdAt:serverTimestamp()});
+        b.set(doc(db,"config","setup"),{by:user.uid,at:serverTimestamp()});
+        await b.commit();toast("Ahora eres el dueño")}catch(e){toast(errTxt(e))}
+    };
+    return;
+  }
+  const subs=[["resumen","Resumen"],["usuarios","Usuarios"],["admins","Admins"],["mod","Moderación"]];
+  v.innerHTML=`<div class="sub">${subs.map(([k,l])=>`<button data-a="${k}" class="${k===asub?"on":""}">${l}</button>`).join("")}</div><div id="abody"></div>`;
+  v.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{asub=b.dataset.a;q="";renderAdmin()});
+  const B=$("abody"),isAdm=id=>adm.admins.some(a=>a.id===id),isBan=id=>adm.bans.some(b=>b.id===id);
+  const permTxt=a=>a.role==="owner"?"todos":(Object.keys(PN).filter(k=>(a.perms||{})[k]).map(k=>PN[k]).join(", ")||"ninguno");
+  if(asub==="resumen"){
+    const c=(n,l)=>`<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`;
+    B.innerHTML=`<p class="note">Tu rol: <b>${myAdmin.role==="owner"?"dueño":"admin"}</b> · permisos: ${esc(permTxt(myAdmin))}</p><div class="grid">${c(adm.profiles.length,"Usuarios registrados")}${c(adm.admins.length,"Administradores")}${c(adm.bans.length,"Baneados")}${c(adm.gdpsAll.length,"GDPS registrados")}${c(adm.gdpsAll.filter(g=>g.published).length,"GDPS publicados")}${c(apks.length,"APKs")}${c(posts.length,"Publicaciones")}${c(chat.length,"Mensajes de chat")}</div>`;
+  }else if(asub==="usuarios"){
+    const rows=adm.profiles.filter(p=>!q||((p.name||"")+(p.email||"")).toLowerCase().includes(q.toLowerCase()));
+    B.innerHTML=`<div class="bar"><input id="q" placeholder="Buscar usuario o correo" value="${esc(q)}"></div>
+    ${rows.length?rows.map(p=>`<div class="arow"><div><b>${esc(p.name)}</b> ${isAdm(p.id)?'<span class="tag cy">Admin</span>':""} ${isBan(p.id)?'<span class="tag bad">Baneado</span>':""}<div class="l">${esc(p.email)}</div></div><div class="btns">${can("posts")&&!isAdm(p.id)&&p.id!==user.uid?(isBan(p.id)?`<button class="sm" data-k="unban" data-id="${p.id}">Quitar ban</button>`:`<button class="sm dng" data-k="ban" data-id="${p.id}">Banear</button>`):""}${can("admins")&&!isAdm(p.id)?`<button class="sm pri" data-k="mkadm" data-id="${p.id}">Hacer admin</button>`:""}</div></div>`).join(""):'<div class="empty">Los usuarios aparecen aquí cuando inician sesión.</div>'}`;
+    keepSearch(renderAdmin);
+  }else if(asub==="admins"){
+    B.innerHTML=adm.admins.map(a=>`<div class="arow"><div><b>${esc(a.email)}</b> <span class="tag ${a.role==="owner"?"warn":"cy"}">${a.role==="owner"?"Dueño":"Admin"}</span><div class="l">Permisos: ${esc(permTxt(a))}</div></div><div class="btns">${can("admins")&&a.role!=="owner"&&a.id!==user.uid?`<button class="sm" data-k="perm" data-id="${a.id}">Permisos</button><button class="sm dng" data-k="rmadm" data-id="${a.id}">Quitar</button>`:""}</div></div>`).join("")+(can("admins")?'<p class="note">Para añadir un admin, pídele que inicie sesión una vez y búscalo en la pestaña Usuarios.</p>':"");
+  }else{
+    const sec=(t,items)=>`<h3>${t}</h3>${items.length?items.join(""):'<div class="empty">Nada por aquí.</div>'}`;
+    const row=(a,b,btn)=>`<div class="arow"><div>${a}<div class="l">${b}</div></div><div class="btns">${btn}</div></div>`;
+    let h="";
+    if(can("gdps"))h+=sec("GDPS Store",adm.gdpsAll.slice(0,30).map(g=>row(`<b>${esc(g.name)}</b> ${g.published?'<span class="tag ok">Publicado</span>':'<span class="tag">Borrador</span>'}`,"por "+esc(g.owner),(g.published?`<button class="sm" data-k="unpub" data-id="${g.id}">Despublicar</button>`:"")+`<button class="sm dng" data-k="delg" data-id="${g.id}">Eliminar</button>`)));
+    if(can("posts")){
+      h+=sec("Publicaciones",posts.slice(0,20).map(x=>row(`<b>${esc(x.author)}</b>`,esc((x.text||"").slice(0,90)),`<button class="sm dng" data-k="delp" data-id="${x.id}">Eliminar</button>`)));
+      h+=sec("Chat",chat.slice(0,20).map(x=>row(`<b>${esc(x.author)}</b>`,esc((x.text||"").slice(0,90)),`<button class="sm dng" data-k="delc" data-id="${x.id}">Eliminar</button>`)));
+      h+=sec("Baneados",adm.bans.map(b=>row(`<b>${esc(b.name||b.id)}</b>`,"No puede publicar ni subir APKs",`<button class="sm" data-k="unban" data-id="${b.id}">Quitar ban</button>`)));
+    }
+    if(can("apks"))h+=sec("APKs",apks.slice(0,20).map(x=>row(`<b>${esc(x.name)}</b>`,"por "+esc(x.author),`<button class="sm dng" data-k="dela" data-id="${x.id}">Eliminar</button>`)));
+    B.innerHTML=h||'<div class="empty">No tienes permisos de moderación.</div>';
+  }
+  B.onclick=async e=>{
+    const b=e.target.closest("button[data-k]");if(!b)return;
+    const k=b.dataset.k,id=b.dataset.id;
+    try{
+      if(k==="unpub")await updateDoc(doc(db,"gdps",id),{published:false});
+      else if(k==="delg"){if(confirm("¿Eliminar este GDPS?"))await deleteDoc(doc(db,"gdps",id))}
+      else if(k==="delp"){if(confirm("¿Eliminar esta publicación?"))await deleteDoc(doc(db,"global_posts",id))}
+      else if(k==="delc")await deleteDoc(doc(db,"global_chat",id));
+      else if(k==="dela"){const a=apks.find(x=>x.id===id);if(confirm("¿Eliminar este APK?")){await deleteDoc(doc(db,"apks",id));if(a&&a.path)deleteObject(sref(storage,a.path)).catch(()=>{})}}
+      else if(k==="ban"){const p=adm.profiles.find(x=>x.id===id);await setDoc(doc(db,"bans",id),{by:user.uid,name:p?p.name:"",createdAt:serverTimestamp()});toast("Baneado de Global y APKs")}
+      else if(k==="unban")await deleteDoc(doc(db,"bans",id));
+      else if(k==="mkadm"){const p=adm.profiles.find(x=>x.id===id);openPerms("Hacer admin a "+p.name,{},perms=>setDoc(doc(db,"admins",id),{email:p.email,role:"admin",perms,addedBy:user.uid,createdAt:serverTimestamp()}))}
+      else if(k==="perm"){const a=adm.admins.find(x=>x.id===id);openPerms("Permisos de "+a.email,a.perms||{},perms=>updateDoc(doc(db,"admins",id),{perms}))}
+      else if(k==="rmadm"){if(confirm("¿Quitar a este administrador?"))await deleteDoc(doc(db,"admins",id))}
+    }catch(er){toast(errTxt(er))}
+  };
+}
+
+/* ---------- Escáner de archivos del GDPS ---------- */
+/*SCAN_START*/
+const TEXT_EXT=new Set(["php","inc","phtml","js","json","html","htm","txt","env","conf","ini","htaccess","md","xml","yml","yaml","cfg","sh","py"]);
+const PHP_EXT=new Set(["php","inc","phtml"]);
+const SEV_N={high:"Alta",med:"Media",low:"Baja"};
+const FIX={
+ sqli_in:"Usa consultas preparadas (PDO prepare + execute con parámetros) y valida el tipo del dato. Nunca pegues datos del usuario dentro del texto SQL.",
+ sqli_var:"Si la variable viene del usuario, usa una consulta preparada con parámetros. Si es un número, conviértelo con (int) antes de usarlo.",
+ inc_in:"No incluyas archivos según datos del usuario. Usa una lista fija de archivos permitidos.",
+ backdoor:"Revisa el archivo ahora mismo: este patrón lo usan las puertas traseras. Si no lo escribiste tú, bórralo, cambia contraseñas y claves y revisa quién tuvo acceso.",
+ eval:"Evita eval(). Busca otra forma de lograr lo mismo y, si no lo escribiste tú, revísalo.",
+ cmd:"Evita ejecutar comandos del sistema. Si es imprescindible, no uses datos del usuario y valida contra una lista fija.",
+ unser:"No uses unserialize() con datos del usuario; usa JSON (json_decode).",
+ extract:"No uses extract() con datos del usuario: puede sobrescribir variables internas.",
+ fileget:"No leas archivos ni URLs según datos del usuario. Valida contra una lista fija o dominios permitidos.",
+ xss:"Escapa lo que muestras con htmlspecialchars($x, ENT_QUOTES, 'UTF-8') o conviértelo a número si lo es.",
+ phpinfo:"Borra phpinfo() o protege el archivo: revela versiones y rutas del servidor.",
+ weakhash:"Guarda contraseñas con password_hash() y compruébalas con password_verify().",
+ mysql_old:"Migra a PDO o mysqli con consultas preparadas; mysql_* ya no existe en PHP moderno.",
+ upload:"Valida extensión, tipo y tamaño, renombra el archivo y guárdalo fuera de la carpeta pública o sin permiso de ejecución.",
+ creds:"Guarda las credenciales en un archivo de configuración fuera de la carpeta pública (o bloqueado con .htaccess) y cámbialas si se filtraron.",
+ disp:"Desactiva display_errors en producción y registra los errores en un archivo.",
+ cors:"Limita Access-Control-Allow-Origin a tu dominio en los endpoints sensibles.",
+ ssl:"No desactives la verificación SSL; instala los certificados correctos.",
+ secret:"El «secret» del juego es público. No lo uses como única protección: valida cuenta y contraseña en cada acción.",
+ rand:"Para tokens y contraseñas usa random_bytes() (por ejemplo bin2hex(random_bytes(16))).",
+ f_env:"Saca el archivo de la carpeta pública o bloquéalo, y cambia las claves que contenga.",
+ f_sql:"Borra el volcado de la web o muévelo fuera: puede contener usuarios y contraseñas.",
+ f_git:"Quita la carpeta .git de la web: contiene todo el código y su historial.",
+ f_shell:"Revisa el archivo: ese nombre es típico de puertas traseras. Si no es tuyo, bórralo y revisa el servidor.",
+ f_info:"Borra los archivos de prueba o protégelos.",
+ f_dbtool:"Protégelo con contraseña extra o por IP, o quítalo de la web.",
+ f_bak:"Borra copias viejas de la web: se pueden descargar con solo saber el nombre.",
+ f_zip:"No dejes respaldos comprimidos en la carpeta pública.",
+ f_log:"Bloquea los logs o muévelos fuera de la web: pueden revelar datos."
+};
+const SGX=/\$_(GET|POST|REQUEST|COOKIE)/;
+const LRULES=[
+ {id:"inc_in",sev:"high",name:"Inclusión de archivo con entrada del usuario",t:l=>/\b(include|require)(_once)?\b[^;]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"backdoor",sev:"high",name:"Código ofuscado (posible puerta trasera)",t:l=>/\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|gzuncompress|str_rot13)/i.test(l)},
+ {id:"eval",sev:"high",name:"Uso de eval()",t:l=>/(?<![\w$>:])eval\s*\(/i.test(l)&&!/\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|gzuncompress|str_rot13)/i.test(l)},
+ {id:"cmd",sev:"high",name:"Ejecución de comandos del sistema",t:l=>/(?<![\w$>:])(system|shell_exec|passthru|popen|proc_open|pcntl_exec|exec)\s*\(/i.test(l)},
+ {id:"unser",sev:"high",name:"unserialize() con entrada del usuario",t:l=>/unserialize\s*\([^)]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"extract",sev:"high",name:"extract() sobre datos del usuario",t:l=>/\bextract\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"fileget",sev:"med",name:"Lectura de archivo o URL con entrada del usuario",t:l=>/\b(file_get_contents|fopen|readfile|curl_init)\s*\([^)]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)},
+ {id:"xss",sev:"med",name:"Salida sin escapar (posible XSS)",t:l=>/\b(echo|print)\b[^;]*\$_(GET|POST|REQUEST|COOKIE)/i.test(l)&&!/htmlspecialchars|htmlentities|intval|\(int\)|ExploitPatch|filter_var|strip_tags|escape|json_encode/i.test(l)},
+ {id:"phpinfo",sev:"med",name:"phpinfo() accesible",t:l=>/\bphpinfo\s*\(/i.test(l)},
+ {id:"weakhash",sev:"med",name:"Hash débil para contraseñas",t:l=>/\b(md5|sha1)\s*\(/i.test(l)&&/pass/i.test(l)},
+ {id:"mysql_old",sev:"med",name:"API mysql_* obsoleta",t:l=>/\bmysql_(query|connect|fetch_\w+|real_escape_string)\s*\(/i.test(l)},
+ {id:"upload",sev:"med",name:"Subida de archivos sin revisar",t:l=>/\bmove_uploaded_file\s*\(/i.test(l)},
+ {id:"creds",sev:"med",name:"Credenciales escritas en el código",mask:1,t:l=>/\$(password|pass|dbpass|db_pass|dbpassword)\s*=\s*(["'])[^"']{3,}\2/i.test(l)||/new\s+PDO\s*\(\s*["'][^"']*["']\s*,\s*["'][^"']*["']\s*,\s*["'][^"']+["']/i.test(l)||/mysqli_connect\s*\([^)]*,\s*["'][^"']+["']\s*,\s*["'][^"']+["']/i.test(l)},
+ {id:"disp",sev:"low",name:"Muestra errores en pantalla",t:l=>/ini_set\s*\(\s*["']display_errors["']\s*,\s*["']?(1|on|true)/i.test(l)},
+ {id:"cors",sev:"low",name:"CORS abierto a cualquier sitio",t:l=>/Access-Control-Allow-Origin\s*:\s*\*/i.test(l)},
+ {id:"ssl",sev:"low",name:"Verificación SSL desactivada",t:l=>/CURLOPT_SSL_VERIFY(PEER|HOST)\s*,\s*(false|0)/i.test(l)},
+ {id:"secret",sev:"low",name:"El «secret» del juego no es una protección",t:l=>/Wmfd2893gb7/.test(l)},
+ {id:"rand",sev:"low",name:"Número aleatorio débil para tokens",t:l=>/\b(rand|mt_rand)\s*\(/i.test(l)&&/(token|pass|key|hash|salt)/i.test(l)}
+];
+const FRULES=[
+ {id:"f_env",sev:"high",name:"Archivo .env en la carpeta del GDPS",re:/(^|\/)\.env(\.|$)/i},
+ {id:"f_sql",sev:"high",name:"Volcado de base de datos en la carpeta",re:/\.sql(\.gz)?$/i},
+ {id:"f_git",sev:"high",name:"Carpeta .git incluida",re:/(^|\/)\.git(\/|$)/i},
+ {id:"f_shell",sev:"high",name:"Nombre típico de web shell",re:/(^|\/)(c99|r57|wso|b374k|shell|cmd|webshell)\.php$/i},
+ {id:"f_info",sev:"med",name:"Archivo de pruebas o diagnóstico",re:/(^|\/)(phpinfo|info|test|debug|tmp)\.php$/i},
+ {id:"f_dbtool",sev:"med",name:"Gestor de base de datos dentro de la web",re:/(^|\/)(adminer|phpmyadmin)/i},
+ {id:"f_bak",sev:"med",name:"Copia de seguridad accesible",re:/(\.(bak|old|orig|save|swp)|~)$/i},
+ {id:"f_zip",sev:"low",name:"Archivo comprimido dentro de la web",re:/\.(zip|tar|gz|rar|7z)$/i},
+ {id:"f_log",sev:"low",name:"Archivo de log accesible",re:/\.log$/i}
+];
+const SQLRE=/(?:->|::)\s*(?:query|exec|prepare)\s*\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')(\s*\.\s*\$)?|\bmysqli?_query\s*\([^,]+,\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')(\s*\.\s*\$)?/gi;
+const maskLine=l=>l.replace(/(=\s*|,\s*)(["'])[^"']{3,}\2/g,'$1"••••"');
+function scanAll(files){
+  const out=[],capR={};
+  for(const f of files){
+    const cap={};
+    const add=(r,line,snip,sev)=>{const k=r.id;cap[k]=(cap[k]||0)+1;if(cap[k]>25)return;out.push({id:r.id,sev:sev||r.sev,name:r.name,fix:FIX[r.id]||"",file:f.path,line,snippet:snip})};
+    for(const r of FRULES){if(r.re.test(f.path)){capR[r.id]=(capR[r.id]||0)+1;if(capR[r.id]<=15)out.push({id:r.id,sev:r.sev,name:r.name,fix:FIX[r.id]||"",file:f.path,line:0,snippet:""})}}
+    if(!f.text||!PHP_EXT.has(f.ext))continue;
+    const lines=f.text.split("\n");
+    for(let i=0;i<lines.length;i++){
+      const l=lines[i];if(l.length>2000)continue;
+      const tl=l.trim();if(!tl||/^(\/\/|#|\*|\/\*)/.test(tl))continue;
+      for(const r of LRULES){
+        if(r.t(l)){
+          const lowCfg=r.id==="creds"&&/config|connection/i.test(f.path);
+          add(r,i+1,(r.mask?maskLine(l):l).trim().slice(0,160),lowCfg?"low":null);
+        }
+      }
+    }
+    SQLRE.lastIndex=0;let m;
+    while((m=SQLRE.exec(f.text))){
+      const lit=m[1]||m[3],concat=m[2]||m[4];
+      const body=lit.slice(1,-1),dq=lit[0]==='"';
+      const interp=dq&&/(^|[^\\])\$[A-Za-z_{]/.test(body);
+      const rest=f.text.slice(m.index+m[0].length,m.index+m[0].length+120).split(";")[0];
+      const sg=SGX.test(body)||(concat&&SGX.test(concat+rest));
+      if(!(interp||concat))continue;
+      const line=f.text.slice(0,m.index).split("\n").length;
+      const r=sg?{id:"sqli_in",sev:"high",name:"Entrada del usuario dentro de una consulta SQL"}:{id:"sqli_var",sev:"med",name:"Consulta SQL armada con variables"};
+      add(r,line,(lines[line-1]||"").trim().slice(0,160));
+    }
+  }
+  const o={high:0,med:1,low:2};
+  out.sort((a,b)=>o[a.sev]-o[b.sev]);
+  return out;
+}
+/*SCAN_END*/
+const extOf=n=>{const b=n.split("/").pop();return b.includes(".")?b.split(".").pop().toLowerCase():""};
+let sfiles=[],sres=[],sdone=false,ssub="vuln";
+function loadJSZip(){return window.JSZip?Promise.resolve(window.JSZip):new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=()=>res(window.JSZip);s.onerror=()=>rej(new Error("No se pudo cargar el lector de .zip"));document.head.append(s)})}
+function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.append(a);a.click();a.remove()}
+function renderScan(){
+  if($("sshell"))return;
+  const v=$("view");
+  v.innerHTML=`<div id="sshell"><div class="card" style="margin-bottom:1rem"><b>Escáner de archivos del GDPS</b>
+    <p class="note">Elige los archivos de tu GDPS (varios .php, o un .zip). Se analizan <b>en tu dispositivo</b>: no se suben a ningún servidor. Es un análisis por patrones: puede dar falsos positivos y no detecta todo, así que revisa cada hallazgo. Úsalo solo con tu propio GDPS o con permiso de su dueño.</p>
+    <input type="file" id="s_files" multiple>
+    <div class="row"><button class="pri" id="s_go">Analizar</button><span class="l" id="s_status"></span></div></div>
+    <div class="sub"><button data-s="vuln">Vulnerabilidades</button><button data-s="grep">Buscar</button><button data-s="files">Archivos</button></div><div id="sbody"></div></div>`;
+  v.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{ssub=b.dataset.s;drawScan()});
+  $("s_go").onclick=scanRun;
+  drawScan();
+}
+async function scanRun(){
+  const picked=[...$("s_files").files],st=$("s_status");
+  if(!picked.length){st.textContent="Elige al menos un archivo.";return}
+  $("s_go").disabled=true;sfiles=[];
+  try{
+    for(const f of picked){
+      if(sfiles.length>=3000)break;
+      if(/\.zip$/i.test(f.name)){
+        if(f.size>2e8){st.textContent="El .zip pasa de 200 MB; usa uno más pequeño.";continue}
+        st.textContent="Leyendo "+f.name+"…";
+        const Z=await loadJSZip(),z=await Z.loadAsync(f);
+        let n=0;
+        for(const name of Object.keys(z.files)){
+          const en=z.files[name];if(en.dir)continue;
+          if(sfiles.length>=3000)break;
+          const ext=extOf(name);let text=null;
+          if(TEXT_EXT.has(ext)){const t=await en.async("string");if(t.length<=2000000)text=t}
+          sfiles.push({path:name,ext,size:text?text.length:null,text});
+          if(++n%50===0){st.textContent="Leyendo… "+sfiles.length+" archivos";await new Promise(r=>setTimeout(r))}
+        }
+      }else{
+        const ext=extOf(f.name);let text=null;
+        if(TEXT_EXT.has(ext)&&f.size<=2000000)text=await f.text();
+        sfiles.push({path:f.webkitRelativePath||f.name,ext,size:f.size,text});
+      }
+    }
+    st.textContent="Analizando…";await new Promise(r=>setTimeout(r));
+    sres=scanAll(sfiles);sdone=true;
+    st.textContent=`${sfiles.length} archivos (${sfiles.filter(f=>f.text).length} leídos como texto) · ${sres.length} hallazgos`;
+  }catch(e){st.textContent="Error: "+e.message}
+  $("s_go").disabled=false;drawScan();
+}
+function drawScan(){
+  document.querySelectorAll("#sshell [data-s]").forEach(b=>b.classList.toggle("on",b.dataset.s===ssub));
+  const B=$("sbody");
+  if(!sdone){B.innerHTML='<div class="empty">Elige archivos y toca Analizar.</div>';return}
+  if(ssub==="vuln"){
+    const cnt=s=>sres.filter(x=>x.sev===s).length;
+    const rules=[...new Map(sres.map(x=>[x.id,x.name])).entries()];
+    B.innerHTML=`<div class="grid" style="margin-bottom:1rem"><div class="card"><div class="n" style="color:var(--bad)">${cnt("high")}</div><div class="l">Alta</div></div><div class="card"><div class="n" style="color:#ffd166">${cnt("med")}</div><div class="l">Media</div></div><div class="card"><div class="n">${cnt("low")}</div><div class="l">Baja</div></div></div>
+    <div class="bar"><select id="f_sev" style="width:auto"><option value="all">Toda severidad</option><option value="high">Alta</option><option value="med">Media</option><option value="low">Baja</option></select>
+    <select id="f_rule" style="width:auto;max-width:100%"><option value="all">Todos los tipos</option>${rules.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join("")}</select>
+    <input id="f_q" placeholder="Filtrar por archivo o texto"></div>
+    <div class="row" style="margin:0 0 1rem"><button class="sm" id="r_txt">Descargar reporte .txt</button><button class="sm" id="r_csv">Descargar .csv</button></div><div id="slist"></div>`;
+    ["f_sev","f_rule"].forEach(i=>$(i).onchange=fillVuln);$("f_q").oninput=fillVuln;
+    $("r_txt").onclick=()=>dl("reporte-gdps.txt",reportTxt(),"text/plain");
+    $("r_csv").onclick=()=>dl("reporte-gdps.csv",reportCsv(),"text/csv");
+    fillVuln();
+  }else if(ssub==="grep"){
+    B.innerHTML=`<div class="bar"><input id="g_q" placeholder="Texto o patrón a buscar en el código"><input id="g_ext" placeholder="extensión (ej: php)" style="max-width:9rem"></div><label class="chk"><input type="checkbox" id="g_re"> Usar expresión regular</label><div id="glist2"></div>`;
+    ["g_q","g_ext"].forEach(i=>$(i).oninput=fillGrep);$("g_re").onchange=fillGrep;fillGrep();
+  }else{
+    const exts=[...new Set(sfiles.map(f=>f.ext||"(sin ext)"))].sort();
+    B.innerHTML=`<div class="bar"><input id="fl_q" placeholder="Filtrar por ruta"><select id="fl_ext" style="width:auto"><option value="all">Todas las extensiones</option>${exts.map(e=>`<option>${esc(e)}</option>`).join("")}</select></div><div id="flist"></div>`;
+    $("fl_q").oninput=fillFiles;$("fl_ext").onchange=fillFiles;fillFiles();
+  }
+}
+function fillVuln(){
+  const sv=$("f_sev").value,rl=$("f_rule").value,q=$("f_q").value.toLowerCase();
+  const rows=sres.filter(x=>(sv==="all"||x.sev===sv)&&(rl==="all"||x.id===rl)&&(!q||(x.file+x.name+x.snippet).toLowerCase().includes(q)));
+  $("slist").innerHTML=rows.length?rows.slice(0,300).map(x=>`<div class="card post"><div><span class="tag ${x.sev==="high"?"bad":x.sev==="med"?"warn":""}">${SEV_N[x.sev]}</span> <b>${esc(x.name)}</b></div><div class="l">${esc(x.file)}${x.line?":"+x.line:""}</div>${x.snippet?`<code class="snip">${esc(x.snippet)}</code>`:""}<details><summary class="l" style="cursor:pointer">Cómo arreglarlo</summary><p class="note">${esc(x.fix)}</p></details></div>`).join("")+(rows.length>300?`<div class="empty">Mostrando 300 de ${rows.length}. Afina los filtros o descarga el reporte.</div>`:""):'<div class="empty">Sin resultados con esos filtros.</div>';
+}
+function fillGrep(){
+  const q=$("g_q").value,ex=$("g_ext").value.trim().toLowerCase().replace(/^\./,""),L=$("glist2");
+  if(!q){L.innerHTML='<div class="empty">Escribe qué buscar.</div>';return}
+  let re;
+  try{re=$("g_re").checked?new RegExp(q,"i"):null}catch(e){L.innerHTML='<div class="empty">La expresión regular no es válida.</div>';return}
+  const ql=q.toLowerCase(),hits=[];let total=0;
+  for(const f of sfiles){
+    if(!f.text||(ex&&f.ext!==ex))continue;
+    const ls=f.text.split("\n");
+    for(let i=0;i<ls.length;i++){
+      if(ls[i].length>2000)continue;
+      if(re?re.test(ls[i]):ls[i].toLowerCase().includes(ql)){total++;if(hits.length<300)hits.push([f.path,i+1,ls[i].trim().slice(0,200)])}
+    }
+  }
+  L.innerHTML=hits.length?`<p class="note">${total} coincidencias${total>300?" (mostrando 300)":""}</p>`+hits.map(h=>`<div class="card post"><div class="l">${esc(h[0])}:${h[1]}</div><code class="snip">${esc(maskLine(h[2]))}</code></div>`).join(""):'<div class="empty">Sin coincidencias.</div>';
+}
+function fillFiles(){
+  const q=$("fl_q").value.toLowerCase(),ex=$("fl_ext").value;
+  const rows=sfiles.filter(f=>(!q||f.path.toLowerCase().includes(q))&&(ex==="all"||(f.ext||"(sin ext)")===ex));
+  $("flist").innerHTML=`<p class="note">${rows.length} archivos</p>`+rows.slice(0,500).map(f=>`<div class="arow"><div style="word-break:break-all">${esc(f.path)}</div><div class="l">${f.size!=null?fmtSize(f.size):""} · ${f.text?"leído":"solo nombre"}</div></div>`).join("");
+}
+function reportTxt(){
+  const c=s=>sres.filter(x=>x.sev===s).length;
+  let t=`Reporte GDPS MANAGER · ${new Date().toLocaleString()}\nArchivos: ${sfiles.length} · Hallazgos: ${sres.length} (Alta ${c("high")}, Media ${c("med")}, Baja ${c("low")})\nAnálisis por patrones: revisa cada hallazgo a mano.\n\n`;
+  for(const x of sres)t+=`[${SEV_N[x.sev].toUpperCase()}] ${x.name}\n  ${x.file}${x.line?":"+x.line:""}\n${x.snippet?"  "+x.snippet+"\n":""}  Solución: ${x.fix}\n\n`;
+  return t;
+}
+function reportCsv(){
+  const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  return ["severidad,tipo,archivo,linea,fragmento,solucion",...sres.map(x=>[SEV_N[x.sev],x.name,x.file,x.line,x.snippet,x.fix].map(q).join(","))].join("\n");
+}
+
+const RULES=String.raw`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+    function canPosts() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.posts == true);
+    }
+    function canApks() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.apks == true);
+    }
+    function canGdps() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.gdps == true);
+    }
+    function canAdmins() {
+      return isAdmin() && (adminDoc().role == 'owner' || adminDoc().perms.admins == true);
+    }
+    function noSetup() {
+      return !exists(/databases/$(database)/documents/config/setup);
+    }
+    function notBanned() {
+      return request.auth != null && !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create: if request.auth != null && ((request.auth.uid == uid && noSetup() && request.resource.data.role == 'owner') || (canAdmins() && request.resource.data.role == 'admin'));
+      allow update: if canAdmins() && resource.data.role != 'owner' && request.resource.data.role == 'admin';
+      allow delete: if canAdmins() && resource.data.role != 'owner' && uid != request.auth.uid;
+    }
+
+    match /config/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && id == 'setup' && noSetup() && getAfter(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    match /profiles/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /bans/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create, delete: if canPosts();
+    }
+
+    match /gdps/{g} {
+      function isOwner() {
+        return request.auth != null && get(/databases/$(database)/documents/gdps/$(g)).data.ownerUid == request.auth.uid;
+      }
+      function isPublished() {
+        return get(/databases/$(database)/documents/gdps/$(g)).data.get('published', false) == true;
+      }
+      allow read: if resource.data.get('published', false) == true || (request.auth != null && resource.data.ownerUid == request.auth.uid) || canGdps();
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if (isOwner() && request.resource.data.ownerUid == resource.data.ownerUid) || (canGdps() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['published']) && request.resource.data.published == false);
+      allow delete: if isOwner() || canGdps();
+
+      match /announcements/{id} {
+        allow read: if isPublished() || isOwner();
+        allow write: if isOwner();
+      }
+      match /levels/{id} {
+        allow read: if isPublished() || isOwner();
+        allow write: if isOwner();
+      }
+      match /members/{id} {
+        allow read, write: if isOwner();
+      }
+    }
+
+    match /global_posts/{id} {
+      allow read: if true;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000;
+      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']);
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canPosts());
+    }
+
+    match /global_chat/{id} {
+      allow read: if true;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500;
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canPosts());
+    }
+
+    match /apks/{id} {
+      allow read: if true;
+      allow create: if notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || canApks());
+    }
+  }
+}`;
+const SRULES=String.raw`rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /apks/{uid}/{file} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 300 * 1024 * 1024;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}`;
+render();
+</script>
+</body>
+</html>
