@@ -63,6 +63,12 @@ pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padd
 .cm.me{align-self:flex-end;border-color:var(--pink)}
 progress{accent-color:var(--pink)}
 h3{margin:1.5rem 0 .5rem}
+.term{background:#0b0a1c;border:1px solid var(--line);border-radius:12px;padding:.8rem;height:50vh;overflow-y:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;line-height:1.5}
+.term div{white-space:pre-wrap;word-break:break-word}
+.term .in{color:var(--cyan)}.term .err{color:var(--bad)}
+.tin{display:flex;gap:.5rem;margin-top:.6rem}
+.chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .8rem}
+.chips button{font-size:.85rem}.chips button.on{background:var(--pink);color:#fff}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -103,7 +109,7 @@ h3{margin:1.5rem 0 .5rem}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where,orderBy,limit,arrayUnion,arrayRemove} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,doc,addDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp,query,where,orderBy,limit,arrayUnion,arrayRemove,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getStorage,ref as sref,uploadBytesResumable,getDownloadURL,deleteObject} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const app=initializeApp({
@@ -145,7 +151,7 @@ onSnapshot(query(collection(db,"gdps"),where("published","==",true)),s=>{store=m
 onAuthStateChanged(auth,u=>{
   user=u;if(mineUnsub){mineUnsub();mineUnsub=null}all=[];
   if(u){$("auth").close();mineUnsub=onSnapshot(query(collection(db,"gdps"),where("ownerUid","==",u.uid)),s=>{all=mapDocs(s);render()},e=>toast(errTxt(e)))}
-  else if(view==="mine"||view==="gdps")view="dir";
+  else if(["mine","gdps","terminal"].includes(view))view="dir";
   render()});
 
 /* ---------- Auth ---------- */
@@ -182,7 +188,7 @@ function read(fields,pre){
 
 /* ---------- Render ---------- */
 function setNav(){
-  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"]];if(user)t.push(["mine","Mis GDPS"]);t.push(["rules","Reglas"]);
+  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);t.push(["rules","Reglas"]);
   $("nav").innerHTML=t.map(([k,l])=>`<button data-v="${k}" class="${(view===k||(view==="gdps"&&k==="mine"))?"on":""}">${l}</button>`).join("");
   $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.v));
   $("who").innerHTML=user?`<span>${esc(user.email)}</span><button class="sm" id="out">Salir</button>`:`<button class="pri sm" id="inb">Entrar</button>`;
@@ -202,6 +208,7 @@ function render(){
   setNav();const v=$("view");
   if(view==="global"){renderGlobal();return}
   if(view==="apk"){renderApk();return}
+  if(view==="terminal"){renderTerminal();return}
   if(view==="rules"){
     v.innerHTML=`<p class="note">Copia cada bloque donde corresponde y toca Publicar.</p>
     <h3>1. Firebase → Firestore → Reglas</h3><div class="row" style="margin:0 0 1rem"><button class="pri" id="cp">Copiar reglas de Firestore</button></div><pre>${esc(RULES)}</pre>
@@ -367,6 +374,148 @@ $("apkOk").onclick=async()=>{
     am2(String(e.code||"").startsWith("storage/")?"No se pudo subir el archivo. Firebase Storage necesita el plan Blaze y sus reglas publicadas. Mientras tanto, pega un link de descarga.":errTxt(e));
   }finally{$("apkOk").disabled=false}
 };
+
+/* ---------- Terminal ---------- */
+let tmode="plat",tlines=[],tgd=null,tpend=null;
+const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const toks=l=>(l.match(/"[^"]*"|\S+/g)||[]).map(x=>x.replace(/^"|"$/g,""));
+function addLine(o,t,c){const d=document.createElement("div");if(c)d.className=c;d.textContent=t;o.append(d)}
+function print(t,c){tlines.push([t,c||""]);if(tlines.length>300)tlines.shift();const o=$("tout");if(o){addLine(o,t,c||"");o.scrollTop=o.scrollHeight}}
+const HELP_PLAT=`Modo plataforma (datos de tu GDPS dentro de GDPS MANAGER)
+mis · use <n> · usuarios · niveles · stats
+agregar <nombre> · ban <nombre> · unban <nombre>
+rol <nombre> <Jugador|Mod|Admin> · estrellas <nombre> <n>
+destacar <nivel> · quitar <nivel> · anuncio <texto>
+modo real · limpiar
+Si el nombre tiene espacios usa comillas: ban "Mi Amigo"`;
+const HELP_REAL=`Modo real (tu GDPS, mediante bridge.php)
+ping · stats · schema
+user <nombre|id> · find user <texto>
+level <id> · find level <texto>
+ban <usuario> · unban <usuario>
+rate <id> <1-10> [feature] [epic] · unrate <id>
+feature <id> · unfeature <id>
+modo plataforma · limpiar
+Los comandos que cambian datos piden confirmación.`;
+const BRIDGE_B64="PD9waHAKLyoKICogR0RQUyBNQU5BR0VSIMK3IGJyaWRnZS5waHAKICogU8O6YmVsbyBhIGxhIGNhcnBldGEgUkHDjVogZGUgdHUgR0RQUyAobGEgcXVlIGNvbnRpZW5lIGxhIGNhcnBldGEgImluY2wiKS4KICogTGEgY2xhdmUgKEJSSURHRV9LRVkpIHkgbGEgcMOhZ2luYSBwZXJtaXRpZGEgKEFMTE9XRURfT1JJR0lOKSBsYXMgcG9uZSBHRFBTIE1BTkFHRVIKICogYWwgZGVzY2FyZ2FyIGVzdGUgYXJjaGl2byBkZXNkZSBsYSBwZXN0YcOxYSBUZXJtaW5hbC4gTm8gY29tcGFydGFzIHR1IGNsYXZlLgogKiBIYXogdW5hIGNvcGlhIGRlIHR1IGJhc2UgZGUgZGF0b3MgZW4gcGhwTXlBZG1pbiAoRXhwb3J0YXIpIGFudGVzIGRlIHVzYXJsby4KICovCmNvbnN0IEJSSURHRV9LRVkgPSAnQ0FNQklBX0VTVEFfQ0xBVkVfTEFSR0EnOwpjb25zdCBBTExPV0VEX09SSUdJTiA9ICdodHRwczovL3plZXI4NjYuZ2l0aHViLmlvJzsKCmhlYWRlcignQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uOyBjaGFyc2V0PXV0Zi04Jyk7CiRvcmlnaW4gPSAkX1NFUlZFUlsnSFRUUF9PUklHSU4nXSA/PyAnJzsKaWYgKCRvcmlnaW4gPT09IEFMTE9XRURfT1JJR0lOKSB7CiAgICBoZWFkZXIoJ0FjY2Vzcy1Db250cm9sLUFsbG93LU9yaWdpbjogJyAuIEFMTE9XRURfT1JJR0lOKTsKICAgIGhlYWRlcignVmFyeTogT3JpZ2luJyk7CiAgICBoZWFkZXIoJ0FjY2Vzcy1Db250cm9sLUFsbG93LUhlYWRlcnM6IENvbnRlbnQtVHlwZSwgWC1LZXknKTsKICAgIGhlYWRlcignQWNjZXNzLUNvbnRyb2wtQWxsb3ctTWV0aG9kczogUE9TVCwgT1BUSU9OUycpOwp9CmlmICgoJF9TRVJWRVJbJ1JFUVVFU1RfTUVUSE9EJ10gPz8gJycpID09PSAnT1BUSU9OUycpIHsgaHR0cF9yZXNwb25zZV9jb2RlKDIwNCk7IGV4aXQ7IH0KCmZ1bmN0aW9uIG91dCgkb2ssICRtc2cpIHsKICAgIGVjaG8ganNvbl9lbmNvZGUoJG9rID8gWydvaycgPT4gdHJ1ZSwgJ291dCcgPT4gJG1zZ10gOiBbJ29rJyA9PiBmYWxzZSwgJ2VycicgPT4gJG1zZ10sIEpTT05fVU5FU0NBUEVEX1VOSUNPREUpOwogICAgZXhpdDsKfQoKaWYgKEJSSURHRV9LRVkgPT09ICdDQU1CSUFfRVNUQV9DTEFWRV9MQVJHQScgfHwgc3RybGVuKEJSSURHRV9LRVkpIDwgMTYpIHsKICAgIGh0dHBfcmVzcG9uc2VfY29kZSg1MDApOwogICAgb3V0KGZhbHNlLCAnQ2FtYmlhIEJSSURHRV9LRVkgZGVudHJvIGRlIGJyaWRnZS5waHAgKG3DrW5pbW8gMTYgY2FyYWN0ZXJlcykuJyk7Cn0KaWYgKCRvcmlnaW4gIT09IEFMTE9XRURfT1JJR0lOKSB7IGh0dHBfcmVzcG9uc2VfY29kZSg0MDMpOyBvdXQoZmFsc2UsICdPcmlnZW4gbm8gcGVybWl0aWRvLicpOyB9CmlmICgoJF9TRVJWRVJbJ1JFUVVFU1RfTUVUSE9EJ10gPz8gJycpICE9PSAnUE9TVCcpIHsgaHR0cF9yZXNwb25zZV9jb2RlKDQwNSk7IG91dChmYWxzZSwgJ1VzYSBQT1NULicpOyB9CmlmICghaGFzaF9lcXVhbHMoQlJJREdFX0tFWSwgJF9TRVJWRVJbJ0hUVFBfWF9LRVknXSA/PyAnJykpIHsgc2xlZXAoMSk7IGh0dHBfcmVzcG9uc2VfY29kZSg0MDEpOyBvdXQoZmFsc2UsICdDbGF2ZSBpbmNvcnJlY3RhLicpOyB9CgovKiAtLS0tIENvbmV4acOzbiBhIGxhIGJhc2UgZGUgZGF0b3MgZGVsIEdEUFMgLS0tLSAqLwpvYl9zdGFydCgpOwppZiAoZmlsZV9leGlzdHMoX19ESVJfXyAuICcvaW5jbC9saWIvY29ubmVjdGlvbi5waHAnKSkgeyBpbmNsdWRlIF9fRElSX18gLiAnL2luY2wvbGliL2Nvbm5lY3Rpb24ucGhwJzsgfQpvYl9lbmRfY2xlYW4oKTsKaWYgKCFpc3NldCgkZGIpIHx8ICEoJGRiIGluc3RhbmNlb2YgUERPKSkgewogICAgb3V0KGZhbHNlLCAnTm8gZW5jb250csOpIGxhIGNvbmV4acOzbiBhIGxhIGJhc2UgZGUgZGF0b3MuIFBvbiBicmlkZ2UucGhwIGVuIGxhIGNhcnBldGEgcmHDrXogZGUgdHUgR0RQUyAoZG9uZGUgZXN0w6EgbGEgY2FycGV0YSBpbmNsKS4nKTsKfQokZGItPnNldEF0dHJpYnV0ZShQRE86OkFUVFJfRVJSTU9ERSwgUERPOjpFUlJNT0RFX0VYQ0VQVElPTik7CgovKiAtLS0tIFV0aWxpZGFkZXMgLS0tLSAqLwpmdW5jdGlvbiBjb2xzKCRkYiwgJHRhYmxlKSB7CiAgICB0cnkgewogICAgICAgICRxID0gJGRiLT5xdWVyeSgnU0hPVyBDT0xVTU5TIEZST00gYCcgLiBzdHJfcmVwbGFjZSgnYCcsICcnLCAkdGFibGUpIC4gJ2AnKTsKICAgICAgICByZXR1cm4gYXJyYXlfY29sdW1uKCRxLT5mZXRjaEFsbChQRE86OkZFVENIX0FTU09DKSwgJ0ZpZWxkJyk7CiAgICB9IGNhdGNoIChFeGNlcHRpb24gJGUpIHsgcmV0dXJuIFtdOyB9Cn0KZnVuY3Rpb24gbmVlZCgkZGIsICR0YWJsZSwgJG5lZWQpIHsKICAgICRoYXZlID0gY29scygkZGIsICR0YWJsZSk7CiAgICBmb3JlYWNoICgkbmVlZCBhcyAkYykgewogICAgICAgIGlmICghaW5fYXJyYXkoJGMsICRoYXZlLCB0cnVlKSkgewogICAgICAgICAgICBvdXQoZmFsc2UsICJUdSBiYXNlIG5vIHRpZW5lIGxvIGVzcGVyYWRvIGVuICR0YWJsZSAoIiAuIGltcGxvZGUoJywgJywgJG5lZWQpIC4gIikuIEVzY3JpYmUgJ3NjaGVtYScgcGFyYSB2ZXIgdHUgZXN0cnVjdHVyYSByZWFsLiIpOwogICAgICAgIH0KICAgIH0KICAgIHJldHVybiAkaGF2ZTsKfQpmdW5jdGlvbiBmaW5kVXNlcigkZGIsICRxKSB7CiAgICAkcyA9ICRkYi0+cHJlcGFyZSgnU0VMRUNUICogRlJPTSB1c2VycyBXSEVSRSB1c2VyTmFtZSA9ID8gTElNSVQgMScpOwogICAgJHMtPmV4ZWN1dGUoWyRxXSk7CiAgICAkdSA9ICRzLT5mZXRjaChQRE86OkZFVENIX0FTU09DKTsKICAgIGlmICghJHUgJiYgY3R5cGVfZGlnaXQoJHEpKSB7CiAgICAgICAgJHMgPSAkZGItPnByZXBhcmUoJ1NFTEVDVCAqIEZST00gdXNlcnMgV0hFUkUgdXNlcklEID0gPyBMSU1JVCAxJyk7CiAgICAgICAgJHMtPmV4ZWN1dGUoWyRxXSk7CiAgICAgICAgJHUgPSAkcy0+ZmV0Y2goUERPOjpGRVRDSF9BU1NPQyk7CiAgICB9CiAgICByZXR1cm4gJHU7Cn0KZnVuY3Rpb24gcGljaygkcm93LCAka2V5cykgewogICAgJG8gPSBbXTsKICAgIGZvcmVhY2ggKCRrZXlzIGFzICRrKSB7IGlmIChhcnJheV9rZXlfZXhpc3RzKCRrLCAkcm93KSkgJG9bXSA9ICIkazogIiAuICRyb3dbJGtdOyB9CiAgICByZXR1cm4gaW1wbG9kZSgiXG4iLCAkbyk7Cn0KCi8qIC0tLS0gQ29tYW5kbyAtLS0tICovCiRpbiA9IGpzb25fZGVjb2RlKGZpbGVfZ2V0X2NvbnRlbnRzKCdwaHA6Ly9pbnB1dCcpLCB0cnVlKTsKJGxpbmUgPSB0cmltKChzdHJpbmcpKCRpblsnY21kJ10gPz8gJycpKTsKaWYgKCRsaW5lID09PSAnJykgb3V0KGZhbHNlLCAnQ29tYW5kbyB2YWPDrW8uJyk7CnByZWdfbWF0Y2hfYWxsKCcvIihbXiJdKikifChcUyspLycsICRsaW5lLCAkbSwgUFJFR19TRVRfT1JERVIpOwokYSA9IFtdOwpmb3JlYWNoICgkbSBhcyAkeCkgeyAkYVtdID0gKGlzc2V0KCR4WzJdKSAmJiAkeFsyXSAhPT0gJycpID8gJHhbMl0gOiAkeFsxXTsgfQokYyA9IHN0cnRvbG93ZXIoJGFbMF0gPz8gJycpOwoKdHJ5IHsKICAgIHN3aXRjaCAoJGMpIHsKICAgICAgICBjYXNlICdwaW5nJzoKICAgICAgICAgICAgb3V0KHRydWUsICdicmlkZ2UgT0sgwrcgUEhQICcgLiBQSFBfVkVSU0lPTik7CgogICAgICAgIGNhc2UgJ3NjaGVtYSc6CiAgICAgICAgICAgICRyID0gW107CiAgICAgICAgICAgIGZvcmVhY2ggKFsndXNlcnMnLCAnbGV2ZWxzJywgJ2FjY291bnRzJ10gYXMgJHQpIHsKICAgICAgICAgICAgICAgICRjcyA9IGNvbHMoJGRiLCAkdCk7CiAgICAgICAgICAgICAgICAkcltdID0gIiR0OiAiIC4gKCRjcyA/IGltcGxvZGUoJywgJywgJGNzKSA6ICcobm8gZXhpc3RlKScpOwogICAgICAgICAgICB9CiAgICAgICAgICAgIG91dCh0cnVlLCBpbXBsb2RlKCJcblxuIiwgJHIpKTsKCiAgICAgICAgY2FzZSAnc3RhdHMnOgogICAgICAgICAgICAkciA9IFtdOwogICAgICAgICAgICBmb3JlYWNoIChbJ3VzZXJzJyA9PiAndXN1YXJpb3MnLCAnbGV2ZWxzJyA9PiAnbml2ZWxlcycsICdhY2NvdW50cycgPT4gJ2N1ZW50YXMnXSBhcyAkdCA9PiAkbikgewogICAgICAgICAgICAgICAgdHJ5IHsgJHJbXSA9ICIkbjogIiAuICRkYi0+cXVlcnkoIlNFTEVDVCBDT1VOVCgqKSBGUk9NIGAkdGAiKS0+ZmV0Y2hDb2x1bW4oKTsgfSBjYXRjaCAoRXhjZXB0aW9uICRlKSB7fQogICAgICAgICAgICB9CiAgICAgICAgICAgIGlmIChpbl9hcnJheSgnaXNCYW5uZWQnLCBjb2xzKCRkYiwgJ3VzZXJzJyksIHRydWUpKSB7CiAgICAgICAgICAgICAgICAkcltdID0gJ2JhbmVhZG9zOiAnIC4gJGRiLT5xdWVyeSgnU0VMRUNUIENPVU5UKCopIEZST00gdXNlcnMgV0hFUkUgaXNCYW5uZWQgPSAxJyktPmZldGNoQ29sdW1uKCk7CiAgICAgICAgICAgIH0KICAgICAgICAgICAgaWYgKGluX2FycmF5KCdzdGFyU3RhcnMnLCBjb2xzKCRkYiwgJ2xldmVscycpLCB0cnVlKSkgewogICAgICAgICAgICAgICAgJHJbXSA9ICduaXZlbGVzIGNvbiBlc3RyZWxsYXM6ICcgLiAkZGItPnF1ZXJ5KCdTRUxFQ1QgQ09VTlQoKikgRlJPTSBsZXZlbHMgV0hFUkUgc3RhclN0YXJzID4gMCcpLT5mZXRjaENvbHVtbigpOwogICAgICAgICAgICB9CiAgICAgICAgICAgIG91dCh0cnVlLCBpbXBsb2RlKCJcbiIsICRyKSk7CgogICAgICAgIGNhc2UgJ3VzZXInOgogICAgICAgICAgICBuZWVkKCRkYiwgJ3VzZXJzJywgWyd1c2VySUQnLCAndXNlck5hbWUnXSk7CiAgICAgICAgICAgIGlmICghaXNzZXQoJGFbMV0pKSBvdXQoZmFsc2UsICdVc286IHVzZXIgPG5vbWJyZXxpZD4nKTsKICAgICAgICAgICAgJHUgPSBmaW5kVXNlcigkZGIsICRhWzFdKTsKICAgICAgICAgICAgaWYgKCEkdSkgb3V0KGZhbHNlLCAnTm8gZW5jb250csOpIGVzZSB1c3VhcmlvLicpOwogICAgICAgICAgICBvdXQodHJ1ZSwgcGljaygkdSwgWyd1c2VySUQnLCAndXNlck5hbWUnLCAnaXNCYW5uZWQnLCAnc3RhcnMnLCAnbW9vbnMnLCAnZGVtb25zJywgJ2NvaW5zJywgJ3VzZXJDb2lucycsICdjcmVhdG9yUG9pbnRzJywgJ2V4dElEJ10pKTsKCiAgICAgICAgY2FzZSAnYmFuJzoKICAgICAgICBjYXNlICd1bmJhbic6CiAgICAgICAgICAgIG5lZWQoJGRiLCAndXNlcnMnLCBbJ3VzZXJJRCcsICd1c2VyTmFtZScsICdpc0Jhbm5lZCddKTsKICAgICAgICAgICAgaWYgKCFpc3NldCgkYVsxXSkpIG91dChmYWxzZSwgIlVzbzogJGMgPHVzdWFyaW8+Iik7CiAgICAgICAgICAgICR1ID0gZmluZFVzZXIoJGRiLCAkYVsxXSk7CiAgICAgICAgICAgIGlmICghJHUpIG91dChmYWxzZSwgJ05vIGVuY29udHLDqSBlc2UgdXN1YXJpby4nKTsKICAgICAgICAgICAgJGRiLT5wcmVwYXJlKCdVUERBVEUgdXNlcnMgU0VUIGlzQmFubmVkID0gPyBXSEVSRSB1c2VySUQgPSA/JyktPmV4ZWN1dGUoWyRjID09PSAnYmFuJyA/IDEgOiAwLCAkdVsndXNlcklEJ11dKTsKICAgICAgICAgICAgb3V0KHRydWUsICgkYyA9PT0gJ2JhbicgPyAnQmFuZWFkbzogJyA6ICdEZXNiYW5lYWRvOiAnKSAuICR1Wyd1c2VyTmFtZSddIC4gJyAoaWQgJyAuICR1Wyd1c2VySUQnXSAuICcpJyk7CgogICAgICAgIGNhc2UgJ2xldmVsJzoKICAgICAgICAgICAgbmVlZCgkZGIsICdsZXZlbHMnLCBbJ2xldmVsSUQnLCAnbGV2ZWxOYW1lJ10pOwogICAgICAgICAgICBpZiAoIWlzc2V0KCRhWzFdKSB8fCAhY3R5cGVfZGlnaXQoJGFbMV0pKSBvdXQoZmFsc2UsICdVc286IGxldmVsIDxpZD4nKTsKICAgICAgICAgICAgJHMgPSAkZGItPnByZXBhcmUoJ1NFTEVDVCAqIEZST00gbGV2ZWxzIFdIRVJFIGxldmVsSUQgPSA/IExJTUlUIDEnKTsKICAgICAgICAgICAgJHMtPmV4ZWN1dGUoWyRhWzFdXSk7CiAgICAgICAgICAgICRsID0gJHMtPmZldGNoKFBETzo6RkVUQ0hfQVNTT0MpOwogICAgICAgICAgICBpZiAoISRsKSBvdXQoZmFsc2UsICdObyBleGlzdGUgZXNlIG5pdmVsLicpOwogICAgICAgICAgICBvdXQodHJ1ZSwgcGljaygkbCwgWydsZXZlbElEJywgJ2xldmVsTmFtZScsICd1c2VyTmFtZScsICdzdGFyU3RhcnMnLCAnc3RhckRpZmZpY3VsdHknLCAnc3RhckZlYXR1cmVkJywgJ3N0YXJFcGljJywgJ2Rvd25sb2FkcycsICdsaWtlcyddKSk7CgogICAgICAgIGNhc2UgJ2ZpbmQnOgogICAgICAgICAgICAkd2hhdCA9IHN0cnRvbG93ZXIoJGFbMV0gPz8gJycpOwogICAgICAgICAgICAkcSA9ICclJyAuICgkYVsyXSA/PyAnJykgLiAnJSc7CiAgICAgICAgICAgIGlmICghaXNzZXQoJGFbMl0pKSBvdXQoZmFsc2UsICdVc286IGZpbmQgdXNlciA8dGV4dG8+IHwgZmluZCBsZXZlbCA8dGV4dG8+Jyk7CiAgICAgICAgICAgIGlmICgkd2hhdCA9PT0gJ3VzZXInKSB7CiAgICAgICAgICAgICAgICBuZWVkKCRkYiwgJ3VzZXJzJywgWyd1c2VySUQnLCAndXNlck5hbWUnXSk7CiAgICAgICAgICAgICAgICAkcyA9ICRkYi0+cHJlcGFyZSgnU0VMRUNUIHVzZXJJRCwgdXNlck5hbWUgRlJPTSB1c2VycyBXSEVSRSB1c2VyTmFtZSBMSUtFID8gTElNSVQgMTAnKTsKICAgICAgICAgICAgICAgICRzLT5leGVjdXRlKFskcV0pOwogICAgICAgICAgICAgICAgJHJvd3MgPSAkcy0+ZmV0Y2hBbGwoUERPOjpGRVRDSF9BU1NPQyk7CiAgICAgICAgICAgICAgICBvdXQodHJ1ZSwgJHJvd3MgPyBpbXBsb2RlKCJcbiIsIGFycmF5X21hcChmdW5jdGlvbiAoJHIpIHsgcmV0dXJuICRyWyd1c2VySUQnXSAuICcgwrcgJyAuICRyWyd1c2VyTmFtZSddOyB9LCAkcm93cykpIDogJ1NpbiByZXN1bHRhZG9zLicpOwogICAgICAgICAgICB9IGVsc2VpZiAoJHdoYXQgPT09ICdsZXZlbCcpIHsKICAgICAgICAgICAgICAgIG5lZWQoJGRiLCAnbGV2ZWxzJywgWydsZXZlbElEJywgJ2xldmVsTmFtZSddKTsKICAgICAgICAgICAgICAgICRzID0gJGRiLT5wcmVwYXJlKCdTRUxFQ1QgbGV2ZWxJRCwgbGV2ZWxOYW1lIEZST00gbGV2ZWxzIFdIRVJFIGxldmVsTmFtZSBMSUtFID8gTElNSVQgMTAnKTsKICAgICAgICAgICAgICAgICRzLT5leGVjdXRlKFskcV0pOwogICAgICAgICAgICAgICAgJHJvd3MgPSAkcy0+ZmV0Y2hBbGwoUERPOjpGRVRDSF9BU1NPQyk7CiAgICAgICAgICAgICAgICBvdXQodHJ1ZSwgJHJvd3MgPyBpbXBsb2RlKCJcbiIsIGFycmF5X21hcChmdW5jdGlvbiAoJHIpIHsgcmV0dXJuICRyWydsZXZlbElEJ10gLiAnIMK3ICcgLiAkclsnbGV2ZWxOYW1lJ107IH0sICRyb3dzKSkgOiAnU2luIHJlc3VsdGFkb3MuJyk7CiAgICAgICAgICAgIH0KICAgICAgICAgICAgb3V0KGZhbHNlLCAnVXNvOiBmaW5kIHVzZXIgPHRleHRvPiB8IGZpbmQgbGV2ZWwgPHRleHRvPicpOwoKICAgICAgICBjYXNlICdyYXRlJzoKICAgICAgICAgICAgJGhhdmUgPSBuZWVkKCRkYiwgJ2xldmVscycsIFsnbGV2ZWxJRCcsICdzdGFyU3RhcnMnLCAnc3RhckRpZmZpY3VsdHknLCAnc3RhckRlbW9uJywgJ3N0YXJBdXRvJywgJ3N0YXJGZWF0dXJlZCddKTsKICAgICAgICAgICAgaWYgKCFpc3NldCgkYVsxXSwgJGFbMl0pIHx8ICFjdHlwZV9kaWdpdCgkYVsxXSkgfHwgIWN0eXBlX2RpZ2l0KCRhWzJdKSB8fCAkYVsyXSA8IDEgfHwgJGFbMl0gPiAxMCkgb3V0KGZhbHNlLCAnVXNvOiByYXRlIDxpZD4gPDEtMTA+IFtmZWF0dXJlXSBbZXBpY10nKTsKICAgICAgICAgICAgJG9wdHMgPSBhcnJheV9tYXAoJ3N0cnRvbG93ZXInLCBhcnJheV9zbGljZSgkYSwgMykpOwogICAgICAgICAgICAkc3RhcnMgPSAoaW50KSRhWzJdOwogICAgICAgICAgICAvLyBlc3RyZWxsYXMgPT4gW2RpZmljdWx0YWQsIGRlbW9uLCBhdXRvXQogICAgICAgICAgICAkbWFwID0gWzEgPT4gWzUwLCAwLCAxXSwgMiA9PiBbMTAsIDAsIDBdLCAzID0+IFsyMCwgMCwgMF0sIDQgPT4gWzMwLCAwLCAwXSwgNSA9PiBbMzAsIDAsIDBdLCA2ID0+IFs0MCwgMCwgMF0sIDcgPT4gWzQwLCAwLCAwXSwgOCA9PiBbNTAsIDAsIDBdLCA5ID0+IFs1MCwgMCwgMF0sIDEwID0+IFs1MCwgMSwgMF1dOwogICAgICAgICAgICBsaXN0KCRkaWZmLCAkZGVtb24sICRhdXRvKSA9ICRtYXBbJHN0YXJzXTsKICAgICAgICAgICAgJGZlYXQgPSAwOwogICAgICAgICAgICBpZiAoaW5fYXJyYXkoJ2ZlYXR1cmUnLCAkb3B0cywgdHJ1ZSkpIHsKICAgICAgICAgICAgICAgICRmZWF0ID0gKGludCkkZGItPnF1ZXJ5KCdTRUxFQ1QgQ09BTEVTQ0UoTUFYKHN0YXJGZWF0dXJlZCksIDApICsgMSBGUk9NIGxldmVscycpLT5mZXRjaENvbHVtbigpOwogICAgICAgICAgICB9CiAgICAgICAgICAgICRzZXQgPSAnc3RhclN0YXJzID0gPywgc3RhckRpZmZpY3VsdHkgPSA/LCBzdGFyRGVtb24gPSA/LCBzdGFyQXV0byA9ID8sIHN0YXJGZWF0dXJlZCA9ID8nOwogICAgICAgICAgICAkcGFyID0gWyRzdGFycywgJGRpZmYsICRkZW1vbiwgJGF1dG8sICRmZWF0XTsKICAgICAgICAgICAgaWYgKGluX2FycmF5KCdlcGljJywgJG9wdHMsIHRydWUpKSB7CiAgICAgICAgICAgICAgICBpZiAoIWluX2FycmF5KCdzdGFyRXBpYycsICRoYXZlLCB0cnVlKSkgb3V0KGZhbHNlLCAiVHUgYmFzZSBubyB0aWVuZSBsYSBjb2x1bW5hIHN0YXJFcGljLiIpOwogICAgICAgICAgICAgICAgJHNldCAuPSAnLCBzdGFyRXBpYyA9ID8nOyAkcGFyW10gPSAxOwogICAgICAgICAgICB9CiAgICAgICAgICAgIGlmIChpbl9hcnJheSgncmF0ZURhdGUnLCAkaGF2ZSwgdHJ1ZSkpIHsgJHNldCAuPSAnLCByYXRlRGF0ZSA9ID8nOyAkcGFyW10gPSB0aW1lKCk7IH0KICAgICAgICAgICAgJHBhcltdID0gKGludCkkYVsxXTsKICAgICAgICAgICAgJHN0ID0gJGRiLT5wcmVwYXJlKCJVUERBVEUgbGV2ZWxzIFNFVCAkc2V0IFdIRVJFIGxldmVsSUQgPSA/Iik7CiAgICAgICAgICAgICRzdC0+ZXhlY3V0ZSgkcGFyKTsKICAgICAgICAgICAgb3V0KCRzdC0+cm93Q291bnQoKSA/ICJOaXZlbCB7JGFbMV19IGNhbGlmaWNhZG8gY29uICRzdGFycyBlc3RyZWxsYXMuIiA6ICdObyBzZSBtb2RpZmljw7MgbmFkYSAowr9leGlzdGUgZXNlIG5pdmVsPykuJyk7CgogICAgICAgIGNhc2UgJ3VucmF0ZSc6CiAgICAgICAgICAgICRoYXZlID0gbmVlZCgkZGIsICdsZXZlbHMnLCBbJ2xldmVsSUQnLCAnc3RhclN0YXJzJywgJ3N0YXJEaWZmaWN1bHR5JywgJ3N0YXJEZW1vbicsICdzdGFyQXV0bycsICdzdGFyRmVhdHVyZWQnXSk7CiAgICAgICAgICAgIGlmICghaXNzZXQoJGFbMV0pIHx8ICFjdHlwZV9kaWdpdCgkYVsxXSkpIG91dChmYWxzZSwgJ1VzbzogdW5yYXRlIDxpZD4nKTsKICAgICAgICAgICAgJHNldCA9ICdzdGFyU3RhcnMgPSAwLCBzdGFyRGlmZmljdWx0eSA9IDAsIHN0YXJEZW1vbiA9IDAsIHN0YXJBdXRvID0gMCwgc3RhckZlYXR1cmVkID0gMCc7CiAgICAgICAgICAgIGlmIChpbl9hcnJheSgnc3RhckVwaWMnLCAkaGF2ZSwgdHJ1ZSkpICRzZXQgLj0gJywgc3RhckVwaWMgPSAwJzsKICAgICAgICAgICAgJHN0ID0gJGRiLT5wcmVwYXJlKCJVUERBVEUgbGV2ZWxzIFNFVCAkc2V0IFdIRVJFIGxldmVsSUQgPSA/Iik7CiAgICAgICAgICAgICRzdC0+ZXhlY3V0ZShbKGludCkkYVsxXV0pOwogICAgICAgICAgICBvdXQoJHN0LT5yb3dDb3VudCgpID8gIk5pdmVsIHskYVsxXX0gc2luIGNhbGlmaWNhY2nDs24uIiA6ICdObyBzZSBtb2RpZmljw7MgbmFkYSAowr9leGlzdGUgZXNlIG5pdmVsPykuJyk7CgogICAgICAgIGNhc2UgJ2ZlYXR1cmUnOgogICAgICAgIGNhc2UgJ3VuZmVhdHVyZSc6CiAgICAgICAgICAgIG5lZWQoJGRiLCAnbGV2ZWxzJywgWydsZXZlbElEJywgJ3N0YXJGZWF0dXJlZCddKTsKICAgICAgICAgICAgaWYgKCFpc3NldCgkYVsxXSkgfHwgIWN0eXBlX2RpZ2l0KCRhWzFdKSkgb3V0KGZhbHNlLCAiVXNvOiAkYyA8aWQ+Iik7CiAgICAgICAgICAgICR2ID0gMDsKICAgICAgICAgICAgaWYgKCRjID09PSAnZmVhdHVyZScpICR2ID0gKGludCkkZGItPnF1ZXJ5KCdTRUxFQ1QgQ09BTEVTQ0UoTUFYKHN0YXJGZWF0dXJlZCksIDApICsgMSBGUk9NIGxldmVscycpLT5mZXRjaENvbHVtbigpOwogICAgICAgICAgICAkc3QgPSAkZGItPnByZXBhcmUoJ1VQREFURSBsZXZlbHMgU0VUIHN0YXJGZWF0dXJlZCA9ID8gV0hFUkUgbGV2ZWxJRCA9ID8nKTsKICAgICAgICAgICAgJHN0LT5leGVjdXRlKFskdiwgKGludCkkYVsxXV0pOwogICAgICAgICAgICBvdXQoJHN0LT5yb3dDb3VudCgpID8gKCRjID09PSAnZmVhdHVyZScgPyAiTml2ZWwgeyRhWzFdfSBkZXN0YWNhZG8uIiA6ICJOaXZlbCB7JGFbMV19IHlhIG5vIGVzdMOhIGRlc3RhY2Fkby4iKSA6ICdObyBzZSBtb2RpZmljw7MgbmFkYSAowr9leGlzdGUgZXNlIG5pdmVsPykuJyk7CgogICAgICAgIGRlZmF1bHQ6CiAgICAgICAgICAgIG91dChmYWxzZSwgIkNvbWFuZG8gZGVzY29ub2NpZG86ICRjLiBFc2NyaWJlICdheXVkYScuIik7CiAgICB9Cn0gY2F0Y2ggKEV4Y2VwdGlvbiAkZSkgewogICAgb3V0KGZhbHNlLCAnRXJyb3IgZGUgYmFzZSBkZSBkYXRvczogJyAuICRlLT5nZXRNZXNzYWdlKCkpOwp9Cg==";
+const MUT=["ban","unban","rate","unrate","feature","unfeature"];
+function setMode(m){tmode=m;tpend=null;print(m==="real"?"Modo REAL: los comandos cambian tu GDPS de verdad. Configura la conexión y prueba con ping.":"Modo plataforma: los comandos cambian solo tus datos en GDPS MANAGER.");renderTerminal()}
+function renderTerminal(){
+  const v=$("view");
+  if(!$("tshell")){
+    v.innerHTML=`<div id="tshell">
+    <div class="chips"><button data-m="plat">Plataforma</button><button data-m="real">Mi GDPS (real)</button><button data-q="ayuda">ayuda</button><button data-q="stats">stats</button><button data-q="limpiar">limpiar</button></div>
+    <details style="margin-bottom:.8rem"><summary class="l" style="cursor:pointer">Cómo conectar mi GDPS (modo real)</summary>
+      <ol class="note" style="padding-left:1.2rem">
+        <li>Toca <b>Descargar bridge.php</b>. Ya trae tu clave y esta página como única permitida.</li>
+        <li>Súbelo con el administrador de archivos de tu hosting a la carpeta raíz de tu GDPS (donde está la carpeta <b>incl</b>).</li>
+        <li>Abajo, en «Configurar conexión», escribe la URL: <b>https://tu-gdps.com/bridge.php</b> y toca Guardar.</li>
+        <li>Toca <b>Mi GDPS (real)</b> y escribe <b>ping</b>. Luego <b>schema</b> para ver que tu base coincide.</li>
+        <li>Antes de usar comandos que modifican datos, exporta una copia de tu base en phpMyAdmin.</li>
+      </ol>
+      <p class="note">Sirve para GDPS basados en Cvolton. Si descargas el archivo otra vez se reutiliza la misma clave de este dispositivo.</p>
+      <div class="row" style="margin-top:0"><button class="pri" id="t_dl">Descargar bridge.php</button></div></details>
+    <details style="margin-bottom:.8rem"><summary class="l" style="cursor:pointer">Configurar conexión con mi GDPS</summary>
+      <label for="t_url">URL de bridge.php</label><input id="t_url" placeholder="https://tu-gdps.com/bridge.php">
+      <label for="t_key">Clave secreta</label><input id="t_key" type="password" autocomplete="off">
+      <div class="row"><button class="pri" id="t_save">Guardar en este dispositivo</button></div></details>
+    <div class="term" id="tout"></div>
+    <div class="tin"><input id="tin" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="pri" id="tgo">Enviar</button></div></div>`;
+    $("t_url").value=lsGet("gm_url");$("t_key").value=lsGet("gm_key");
+    $("t_save").onclick=()=>{const u=$("t_url").value.trim();if(u&&!/^https:\/\//i.test(u)){toast("La URL debe empezar con https://");return}lsSet("gm_url",u);lsSet("gm_key",$("t_key").value.trim());toast("Guardado en este dispositivo")};
+    $("t_dl").onclick=()=>{
+      let key=lsGet("gm_key");
+      if(key.length<16||/[^\w\-]/.test(key)){const r=new Uint8Array(24);crypto.getRandomValues(r);key=Array.from(r,x=>x.toString(16).padStart(2,"0")).join("");lsSet("gm_key",key);$("t_key").value=key}
+      let src=new TextDecoder().decode(Uint8Array.from(atob(BRIDGE_B64),c=>c.charCodeAt(0)));
+      src=src.replace("const BRIDGE_KEY = 'CAMBIA_ESTA_CLAVE_LARGA';","const BRIDGE_KEY = '"+key+"';").replace("const ALLOWED_ORIGIN = 'https://zeer866.github.io';","const ALLOWED_ORIGIN = '"+location.origin+"';");
+      const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([src],{type:"text/x-php"}));a.download="bridge.php";document.body.append(a);a.click();a.remove();
+      toast("bridge.php descargado con tu clave");
+    };
+    v.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+    v.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>runCmd(b.dataset.q));
+    const send=()=>{const i=$("tin"),l=i.value;i.value="";runCmd(l)};
+    $("tgo").onclick=send;$("tin").onkeydown=e=>{if(e.key==="Enter")send()};
+    const o=$("tout");
+    if(!tlines.length)print("GDPS MANAGER Terminal · escribe ayuda para ver los comandos.");
+    else tlines.forEach(([t,c])=>addLine(o,t,c));
+    o.scrollTop=o.scrollHeight;
+  }
+  v.querySelectorAll("[data-m]").forEach(b=>b.classList.toggle("on",b.dataset.m===tmode));
+  $("tin").placeholder=tmode==="real"?"[real] escribe un comando":"[plataforma] escribe un comando";
+}
+async function runCmd(line){
+  line=(line||"").trim();if(!line)return;
+  print("> "+line,"in");
+  if(tpend){const p=tpend;tpend=null;if(/^(s|si|sí|y|yes)$/i.test(line))await real(p);else print("Cancelado.");return}
+  const [c0,...a]=toks(line),c=(c0||"").toLowerCase();
+  if(c==="limpiar"||c==="clear"){tlines=[];const o=$("tout");if(o)o.innerHTML="";return}
+  if(c==="ayuda"||c==="help"){print(tmode==="real"?HELP_REAL:HELP_PLAT);return}
+  if(c==="modo"){const m=(a[0]||"").toLowerCase();if(m==="real")setMode("real");else if(m==="plataforma")setMode("plat");else print("Uso: modo real | modo plataforma","err");return}
+  try{
+    if(tmode==="real"){
+      if(MUT.includes(c)){tpend=line;print("⚠ Esto cambia tu GDPS real. Escribe s para confirmar, o cualquier otra cosa para cancelar.","err");return}
+      await real(line);
+    }else await plat(c,a,line);
+  }catch(e){print(errTxt(e),"err")}
+}
+async function real(line){
+  const url=lsGet("gm_url"),key=lsGet("gm_key");
+  if(!url||!key){print("Falta configurar la URL y la clave. Abre «Configurar conexión con mi GDPS».","err");return}
+  if(!/^https:\/\//i.test(url)){print("La URL debe empezar con https://","err");return}
+  try{
+    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-Key":key},body:JSON.stringify({cmd:line})});
+    const j=await r.json();
+    print(j.ok?j.out:"Error: "+j.err,j.ok?"":"err");
+  }catch(e){print("No se pudo conectar. Revisa que la URL sea correcta, que bridge.php esté subido y que tu GDPS use https. ("+e.message+")","err")}
+}
+function pick(list,name){
+  const n=String(name||"").toLowerCase();
+  const ex=list.filter(x=>String(x.name).toLowerCase()===n);if(ex.length===1)return ex[0];
+  const p=list.filter(x=>String(x.name).toLowerCase().includes(n));
+  return p.length===1?p[0]:(p.length?"amb":null);
+}
+async function plat(c,a,line){
+  if(c==="mis"){print(all.length?all.map((g,i)=>`${i+1}. ${g.name}${g.id===tgd?"  ← en uso":""}`).join("\n"):"No tienes GDPS registrados. Registra uno en Mis GDPS.");return}
+  if(c==="use"){
+    if(!a[0]){print("Uso: use <número o nombre>","err");return}
+    const g=all[Number(a[0])-1]||all.find(x=>x.name.toLowerCase()===a.join(" ").toLowerCase());
+    if(!g){print("No encontré ese GDPS. Escribe mis para verlos.","err");return}
+    tgd=g.id;print("Usando: "+g.name);return;
+  }
+  if(!all.some(g=>g.id===tgd))tgd=all.length===1?all[0].id:null;
+  if(!tgd){print(all.length?"Primero elige un GDPS: escribe mis y luego use <n>.":"No tienes GDPS registrados. Registra uno en Mis GDPS.","err");return}
+  const load=async n=>(await getDocs(collection(db,"gdps",tgd,n))).docs.map(d=>({id:d.id,...d.data()}));
+  const upd=async(n,name,patch,msg)=>{
+    if(!name){print("Falta el nombre.","err");return}
+    const m=pick(await load(n),name);
+    if(!m){print("No encontré «"+name+"».","err");return}
+    if(m==="amb"){print("Hay varios que coinciden con «"+name+"». Sé más específico.","err");return}
+    await updateDoc(doc(db,"gdps",tgd,n,m.id),patch);print(msg(m));
+  };
+  if(c==="usuarios"){const l=await load("members");print(l.length?l.map(u=>`${u.name} · ${u.role} · ⭐${u.stars||0}${u.banned?" · BANEADO":""}`).join("\n"):"Aún no hay usuarios.");return}
+  if(c==="niveles"){const l=await load("levels");print(l.length?l.map(x=>`${x.name} · ${x.author} · ${x.difficulty}${x.featured?" · DESTACADO":""}`).join("\n"):"Aún no hay niveles.");return}
+  if(c==="stats"){const u=await load("members"),l=await load("levels"),an=await load("announcements");print(`usuarios: ${u.length} (baneados: ${u.filter(x=>x.banned).length})\nniveles: ${l.length} (destacados: ${l.filter(x=>x.featured).length})\nanuncios: ${an.length}`);return}
+  if(c==="agregar"){const n=a.join(" ");if(!n){print("Uso: agregar <nombre>","err");return}await addDoc(collection(db,"gdps",tgd,"members"),{name:n,role:"Jugador",stars:0,banned:false,createdAt:serverTimestamp()});print("Usuario agregado: "+n);return}
+  if(c==="ban"||c==="unban"){await upd("members",a.join(" "),{banned:c==="ban"},m=>(c==="ban"?"Baneado: ":"Desbaneado: ")+m.name);return}
+  if(c==="rol"){
+    const r={jugador:"Jugador",mod:"Mod",admin:"Admin"}[(a[a.length-1]||"").toLowerCase()];
+    if(a.length<2||!r){print("Uso: rol <nombre> <Jugador|Mod|Admin>","err");return}
+    await upd("members",a.slice(0,-1).join(" "),{role:r},m=>`${m.name} ahora es ${r}`);return;
+  }
+  if(c==="estrellas"){
+    const n=Number(a[a.length-1]);
+    if(a.length<2||Number.isNaN(n)){print("Uso: estrellas <nombre> <n>","err");return}
+    await upd("members",a.slice(0,-1).join(" "),{stars:n},m=>`${m.name} tiene ${n} estrellas`);return;
+  }
+  if(c==="destacar"||c==="quitar"){await upd("levels",a.join(" "),{featured:c==="destacar"},m=>(c==="destacar"?"Destacado: ":"Quitado de destacados: ")+m.name);return}
+  if(c==="anuncio"){
+    const t=line.replace(/^\S+\s*/,"").trim();
+    if(!t){print("Uso: anuncio <texto>","err");return}
+    await addDoc(collection(db,"gdps",tgd,"announcements"),{title:t.slice(0,60),body:t,createdAt:serverTimestamp()});print("Anuncio publicado.");return;
+  }
+  print("Comando desconocido: "+c+". Escribe ayuda.","err");
+}
 
 const RULES=String.raw`rules_version = '2';
 service cloud.firestore {
