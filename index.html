@@ -203,7 +203,7 @@ function read(fields,pre){
 
 /* ---------- Render ---------- */
 function setNav(){
-  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"],["scan","Escáner"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);if(myAdmin||(user&&!setupExists))t.push(["admin","Admin"]);t.push(["rules","Reglas"]);
+  const t=[["dir","GDPS Store"],["global","Global"],["apk","APKs"],["scan","Escáner"],["script","Script"]];if(user)t.push(["mine","Mis GDPS"],["terminal","Terminal"]);if(myAdmin||(user&&!setupExists))t.push(["admin","Admin"]);t.push(["rules","Reglas"]);
   $("nav").innerHTML=t.map(([k,l])=>`<button data-v="${k}" class="${(view===k||(view==="gdps"&&k==="mine"))?"on":""}">${l}</button>`).join("");
   $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.v));
   $("who").innerHTML=user?`<span>${esc(user.email)}</span><button class="sm" id="out">Salir</button>`:`<button class="pri sm" id="inb">Entrar</button>`;
@@ -225,6 +225,7 @@ function render(){
   if(view==="apk"){renderApk();return}
   if(view==="terminal"){renderTerminal();return}
   if(view==="scan"){renderScan();return}
+  if(view==="script"){renderPatch();return}
   if(view==="admin"){renderAdmin();return}
   if(view==="rules"){
     v.innerHTML=`<p class="note">Copia cada bloque donde corresponde y toca Publicar.</p>
@@ -837,6 +838,204 @@ function reportTxt(){
 function reportCsv(){
   const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
   return ["severidad,tipo,archivo,linea,fragmento,solucion",...sres.map(x=>[SEV_N[x.sev],x.name,x.file,x.line,x.snippet,x.fix].map(q).join(","))].join("\n");
+}
+
+/* ---------- Script: parcheador de archivos con comandos ---------- */
+/*PATCH_START*/
+const ptoks=l=>(l.match(/"[^"]*"|'[^']*'|\S+/g)||[]).map(x=>x.length>=2&&/^(["']).*\1$/.test(x)?x.slice(1,-1):x);
+const unesc=t=>t.replace(/\\n/g,"\n").replace(/\\t/g,"\t");
+function parseRange(a,max){const m=/^(\d+)(?:-(\d+))?$/.exec(a||"");if(!m)return null;const x=+m[1],y=m[2]?+m[2]:x;if(x<1||y<x||y>max)return null;return[x,y]}
+function lineDiff(a,b){
+  const n=a.length,m=b.length;if(n*m>6e6)return["Archivo muy grande para mostrar el diff."];
+  const w=m+1,d=new Uint16Array((n+1)*w);
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)d[i*w+j]=a[i]===b[j]?d[(i+1)*w+j+1]+1:Math.max(d[(i+1)*w+j],d[i*w+j+1]);
+  const out=[];let i=0,j=0;
+  while(i<n&&j<m){if(a[i]===b[j]){i++;j++}else if(d[(i+1)*w+j]>=d[i*w+j+1]){out.push("- "+(i+1)+": "+a[i].trim().slice(0,120));i++}else{out.push("+ "+(j+1)+": "+b[j].trim().slice(0,120));j++}}
+  while(i<n){out.push("- "+(i+1)+": "+a[i].trim().slice(0,120));i++}
+  while(j<m){out.push("+ "+(j+1)+": "+b[j].trim().slice(0,120));j++}
+  return out;
+}
+const HELP_PATCH=`Script · comandos (las líneas se cuentan desde 1)
+ver 10-60 · buscar texto · diff
+reemplazar "viejo" "nuevo" [regex]
+insertar antes|despues <línea o "texto"> "contenido"  (usa \\n para varias líneas)
+borrar 12  ·  borrar 12-15
+comentar 12-15  ·  descomentar 12-15
+deshacer · restaurar · descargar
+archivos · abrir <n> · limpiar
+receta (ver lista) · receta <nombre>
+sql stats "usuario" estrellas=100 demonios=5  (genera SQL para phpMyAdmin)`;
+const SQL_MAP={estrellas:"stars",demonios:"demons",diamantes:"diamonds",monedas:"coins","monedas-usuario":"userCoins",orbes:"orbs",cp:"creatorPoints",lunas:"moons"};
+const COMMENT={php:"// ",inc:"// ",phtml:"// ",js:"// ",htaccess:"# ",env:"# ",sh:"# ",py:"# ",yml:"# ",yaml:"# ",conf:"# ",ini:"; "};
+function patchCmd(f,line){
+  const t=ptoks(line),c=(t[0]||"").toLowerCase(),a=t.slice(1);
+  const L=f.text.split("\n"),n=L.length;
+  const set=(txt,msg,win)=>{f.hist.push(f.text);if(f.hist.length>50)f.hist.shift();f.text=txt;return{out:msg,win}};
+  const E=m=>({out:"Error: "+m,err:1});
+  switch(c){
+    case "ver":{
+      if(!a[0])return{out:"",win:[1,80]};
+      const r=parseRange(a[0],n);if(!r)return E("Uso: ver 10-60 (el archivo tiene "+n+" líneas).");
+      return{out:"",win:r};
+    }
+    case "buscar":{
+      if(!a[0])return E("Uso: buscar <texto>");
+      const q=a.join(" ").toLowerCase(),hits=[];
+      L.forEach((x,i)=>{if(x.toLowerCase().includes(q))hits.push((i+1)+": "+x.trim().slice(0,120))});
+      return{out:hits.length?hits.slice(0,50).join("\n")+(hits.length>50?"\n… y "+(hits.length-50)+" más":""):"Sin coincidencias."};
+    }
+    case "reemplazar":{
+      if(a.length<2)return E('Uso: reemplazar "viejo" "nuevo" [regex]');
+      const rx=(a[2]||"").toLowerCase()==="regex",nv=unesc(a[1]);
+      let cnt=0,res;
+      if(rx){
+        let re;try{re=new RegExp(a[0],"g")}catch(e){return E("la expresión regular no es válida.")}
+        res=f.text.replace(re,(...m)=>{cnt++;return nv.replace(/\$(\d)/g,(_,d)=>typeof m[+d]==="string"?m[+d]:"")});
+      }else{
+        const old=unesc(a[0]);if(!old)return E("el texto a buscar está vacío.");
+        cnt=f.text.split(old).length-1;res=f.text.split(old).join(nv);
+      }
+      if(!cnt)return E("no encontré ese texto.");
+      return set(res,"Reemplazadas "+cnt+" coincidencia(s).",null);
+    }
+    case "insertar":{
+      const pos=(a[0]||"").toLowerCase();
+      if(!["antes","despues","después"].includes(pos)||a.length<3)return E('Uso: insertar antes|despues <línea o "texto"> "contenido"');
+      let idx;
+      if(/^\d+$/.test(a[1])){idx=+a[1];if(idx<1||idx>n)return E("la línea debe estar entre 1 y "+n+".")}
+      else{const q=a[1].toLowerCase();idx=L.findIndex(x=>x.toLowerCase().includes(q))+1;if(!idx)return E("no encontré esa línea.")}
+      const ins=unesc(a.slice(2).join(" ")).split("\n"),at=pos==="antes"?idx-1:idx;
+      L.splice(at,0,...ins);
+      return set(L.join("\n"),"Insertadas "+ins.length+" línea(s) desde la "+(at+1)+".",[Math.max(1,at-2),at+ins.length+4]);
+    }
+    case "borrar":{
+      const r=parseRange(a[0],n);if(!r)return E("Uso: borrar 12 o borrar 12-15 (hay "+n+" líneas).");
+      const k=r[1]-r[0]+1;if(k>=n)return E("no puedes borrar todo el archivo.");
+      L.splice(r[0]-1,k);
+      return set(L.join("\n"),"Borradas "+k+" línea(s).",[Math.max(1,r[0]-3),r[0]+6]);
+    }
+    case "comentar":case "descomentar":{
+      const r=parseRange(a[0],n);if(!r)return E("Uso: "+c+" 12 o "+c+" 12-15");
+      const mk=COMMENT[f.ext];if(!mk)return E("no sé comentar archivos ."+f.ext+".");
+      const tk=mk.trim();
+      for(let i=r[0]-1;i<r[1];i++){
+        if(c==="comentar")L[i]=mk+L[i];
+        else{const x=L[i],j=x.indexOf(tk);if(j>=0&&x.slice(0,j).trim()==="")L[i]=x.slice(0,j)+x.slice(j+tk.length).replace(/^ /,"")}
+      }
+      return set(L.join("\n"),(c==="comentar"?"Comentadas ":"Descomentadas ")+(r[1]-r[0]+1)+" línea(s).",[Math.max(1,r[0]-2),r[1]+3]);
+    }
+    case "deshacer":{
+      if(!f.hist.length)return E("no hay nada que deshacer.");
+      f.text=f.hist.pop();return{out:"Deshecho.",win:null};
+    }
+    case "restaurar":{
+      if(f.text===f.orig)return{out:"Ya está como el original."};
+      return set(f.orig,"Archivo restaurado al original (puedes deshacer).",null);
+    }
+    case "diff":{
+      const d=lineDiff(f.orig.split("\n"),L);
+      return{out:d.length?d.slice(0,200).join("\n")+(d.length>200?"\n… y "+(d.length-200)+" más":""):"Sin cambios."};
+    }
+    case "receta":{
+      const nm=(a[0]||"").toLowerCase();
+      if(!nm)return{out:"Recetas:\nocultar-errores (php) · desactiva display_errors al inicio del archivo\nhtaccess-seguro (.htaccess) · bloquea el listado de carpetas y el acceso a .env, .sql, .bak, .old y .log"};
+      if(nm==="ocultar-errores"){
+        if(!["php","inc","phtml"].includes(f.ext))return E("esta receta es para archivos PHP.");
+        if(/display_errors['"]\s*,\s*['"]?(0|off|false)/i.test(f.text))return E("el archivo ya desactiva display_errors.");
+        const i=L.findIndex(x=>x.includes("<?php"));if(i<0)return E("no encontré la etiqueta <?php.");
+        L.splice(i+1,0,"ini_set('display_errors', '0');");
+        return set(L.join("\n"),"Receta aplicada: errores ocultos.",[Math.max(1,i),i+6]);
+      }
+      if(nm==="htaccess-seguro"){
+        if(f.ext!=="htaccess")return E("esta receta es para un archivo .htaccess.");
+        if(f.text.includes("-Indexes"))return E("este .htaccess ya tiene Options -Indexes.");
+        const add='\nOptions -Indexes\n<FilesMatch "\\.(env|sql|bak|old|log)$">\n  Require all denied\n</FilesMatch>';
+        const txt=f.text.replace(/\s+$/,"")+"\n"+add+"\n";
+        return set(txt,"Receta aplicada: .htaccess endurecido.",[Math.max(1,n-1),n+8]);
+      }
+      return E("no existe esa receta. Escribe receta para ver la lista.");
+    }
+    case "sql":{
+      if((a[0]||"").toLowerCase()!=="stats"||a.length<3)return E('Uso: sql stats "usuario" estrellas=100 demonios=5');
+      const sets=[];
+      for(const kv of a.slice(2)){
+        const m=/^([a-záéíóúñ-]+)=(\d{1,10})$/i.exec(kv);
+        if(!m||!SQL_MAP[m[1].toLowerCase()])return E("campo no válido: "+kv+". Campos: "+Object.keys(SQL_MAP).join(", ")+".");
+        if(+m[2]>2147483647)return E("valor demasiado grande: "+kv);
+        sets.push(SQL_MAP[m[1].toLowerCase()]+" = "+(+m[2]));
+      }
+      const u=a[1].replace(/\\/g,"\\\\").replace(/'/g,"''");
+      return{out:"UPDATE users SET "+sets.join(", ")+" WHERE userName = '"+u+"';\n\nCópialo en phpMyAdmin → pestaña SQL. Haz una copia de la base antes y comprueba que tu tabla users tenga esas columnas."};
+    }
+    default:return E("comando desconocido: "+(c||"(vacío)")+". Escribe ayuda.");
+  }
+}
+/*PATCH_END*/
+let pf=[],pcur=0,pwin=[1,80],plog=[];
+function pPrint(t,c){plog.push([t,c||""]);if(plog.length>200)plog.shift();const o=$("p_out");if(o){addLine(o,t,c||"");o.scrollTop=o.scrollHeight}}
+function renderPatch(){
+  if($("pshell"))return;
+  const v=$("view");
+  v.innerHTML=`<div id="pshell"><div class="card" style="margin-bottom:1rem"><b>Script · parchea archivos de tu GDPS con comandos</b>
+    <p class="note">Elige archivos de texto de tu GDPS (php, js, .htaccess, json…). Los comandos los modifican <b>en tu dispositivo</b>; al terminar descargas el archivo parcheado y lo subes a tu servidor. No edita APK ni archivos binarios. Guarda una copia del original antes de subir cambios.</p>
+    <input type="file" id="p_files" multiple>
+    <div class="row"><button class="pri" id="p_load">Cargar</button><button id="p_help">Ayuda</button></div></div>
+    <div class="chips" id="p_chips"></div>
+    <div class="term" id="p_view" style="height:40vh;overflow:auto"></div>
+    <div class="row" style="margin:.5rem 0"><button class="sm" id="p_prev">← Anterior</button><button class="sm" id="p_next">Siguiente →</button><button class="sm pri" id="p_dl">Descargar parcheado</button></div>
+    <div class="term" id="p_out" style="height:22vh"></div>
+    <div class="tin"><input id="p_in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escribe un comando (ayuda)"><button class="pri" id="p_go">Enviar</button></div></div>`;
+  $("p_load").onclick=pLoad;
+  $("p_help").onclick=()=>pRun("ayuda");
+  $("p_dl").onclick=()=>pRun("descargar");
+  const step=d=>{const k=pwin[1]-pwin[0]+1;pwin=[Math.max(1,pwin[0]+d*k),Math.max(1,pwin[0]+d*k)+k-1];pDraw()};
+  $("p_prev").onclick=()=>step(-1);$("p_next").onclick=()=>step(1);
+  const send=()=>{const i=$("p_in"),l=i.value;i.value="";pRun(l)};
+  $("p_go").onclick=send;$("p_in").onkeydown=e=>{if(e.key==="Enter")send()};
+  const o=$("p_out");
+  if(!plog.length)pPrint("Script listo. Carga un archivo y escribe ayuda para ver los comandos.");
+  else plog.forEach(([t,c])=>addLine(o,t,c));
+  pDraw();
+}
+async function pLoad(){
+  const picked=[...$("p_files").files];
+  if(!picked.length){pPrint("Elige al menos un archivo.","err");return}
+  for(const f of picked){
+    const ext=extOf(f.name);
+    if(!TEXT_EXT.has(ext)){pPrint(f.name+": no es un archivo de texto compatible (se omite).","err");continue}
+    if(f.size>2000000){pPrint(f.name+": pasa de 2 MB (se omite).","err");continue}
+    const text=await f.text();
+    pf.push({name:f.name,ext,orig:text,text,hist:[]});pcur=pf.length-1;pwin=[1,80];
+    pPrint("Cargado: "+f.name+" ("+text.split("\n").length+" líneas)");
+  }
+  pDraw();
+}
+function pDraw(){
+  const ch=$("p_chips"),vw=$("p_view");if(!ch||!vw)return;
+  ch.innerHTML=pf.map((f,i)=>`<button data-i="${i}" class="${i===pcur?"on":""}">${esc(f.name)}${f.text!==f.orig?" •":""}</button>`).join("");
+  ch.querySelectorAll("button").forEach(b=>b.onclick=()=>{pcur=+b.dataset.i;pwin=[1,80];pDraw()});
+  if(!pf.length){vw.textContent="Aún no hay archivos cargados.";return}
+  const f=pf[pcur],L=f.text.split("\n"),a=Math.min(pwin[0],L.length),b=Math.min(pwin[1],L.length);
+  const pad=String(b).length;
+  vw.innerHTML="";const pre=document.createElement("pre");pre.style.margin="0";
+  pre.textContent=`${f.name} · líneas ${a}-${b} de ${L.length}\n`+L.slice(a-1,b).map((l,i)=>String(a+i).padStart(pad)+"  "+l).join("\n");
+  vw.append(pre);
+}
+function pRun(line){
+  line=(line||"").trim();if(!line)return;
+  pPrint("> "+line,"in");
+  const c=line.split(/\s+/)[0].toLowerCase();
+  if(c==="ayuda"||c==="help"){pPrint(HELP_PATCH);return}
+  if(c==="limpiar"){plog=[];const o=$("p_out");if(o)o.innerHTML="";return}
+  if(c==="archivos"){pPrint(pf.length?pf.map((f,i)=>(i+1)+". "+f.name+(i===pcur?"  ← abierto":"")).join("\n"):"No hay archivos cargados.");return}
+  if(c==="abrir"){const i=Number(line.split(/\s+/)[1])-1;if(pf[i]){pcur=i;pwin=[1,80];pDraw();pPrint("Abierto: "+pf[i].name)}else pPrint("Error: elige un número de la lista (escribe archivos).","err");return}
+  if(!pf.length&&c!=="sql"){pPrint("Primero carga un archivo.","err");return}
+  if(c==="descargar"||c==="guardar"){const f=pf[pcur];dl(f.name,f.text,"text/plain");pPrint("Descargado: "+f.name+(f.text===f.orig?" (sin cambios)":""));return}
+  const f=pf[pcur]||{text:"",orig:"",hist:[],ext:"txt",name:""};
+  const r=patchCmd(f,line);
+  if(r.out)pPrint(r.out,r.err?"err":"");
+  if(r.win)pwin=r.win;
+  pDraw();
 }
 
 const RULES=String.raw`rules_version = '2';
